@@ -91,6 +91,10 @@ class CandleCollector:
             self._validate_batch(candles, duration, current_start)
             max_open_time = max(candle.open_time for candle in candles)
 
+            candles.sort(key=lambda candle: candle.open_time)
+            self._validate_batch(candles, duration, previous_open_time)
+            max_open_time = max(candle.open_time for candle in candles)
+
             # Store candles
             async with async_session_factory() as session:
                 async with session.begin():
