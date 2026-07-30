@@ -44,7 +44,58 @@ CREATE TABLE IF NOT EXISTS dds.candle (
             AND high_price >= low_price
             AND volume >= 0
             AND close_price > 0
-        )
+        ),
+    -- Invalid RAW rows are rejected by RAW -> DDS ETL and recorded in
+    -- data_quality_event. These two columns remain for backwards compatibility.
+    CONSTRAINT chk_dds_candle_valid_only
+        CHECK (is_valid = true AND validation_errors IS NULL)
+);
+
+-- Rejected source rows. DDS candles themselves contain valid, closed candles only.
+CREATE TABLE IF NOT EXISTS dds.data_quality_event (
+    event_id            bigserial   PRIMARY KEY,
+    exchange_name       text        NOT NULL,
+    symbol              text        NOT NULL,
+    interval_code       text        NOT NULL,
+    open_time           timestamptz NOT NULL,
+    check_name          text        NOT NULL,
+    error_details       jsonb       NOT NULL,
+    source_payload      jsonb,
+    first_seen_at       timestamptz NOT NULL DEFAULT now(),
+    last_seen_at        timestamptz NOT NULL DEFAULT now(),
+    occurrence_count    bigint      NOT NULL DEFAULT 1,
+    CONSTRAINT uq_dds_data_quality_event
+        UNIQUE (exchange_name, symbol, interval_code, open_time, check_name)
+);
+
+-- Incremental ETL watermark and execution journal.
+CREATE TABLE IF NOT EXISTS dds.etl_checkpoint (
+    exchange_name       text        NOT NULL,
+    symbol              text        NOT NULL,
+    interval_code       text        NOT NULL,
+    last_loaded_at      timestamptz NOT NULL DEFAULT '-infinity',
+    last_run_at         timestamptz NOT NULL DEFAULT '-infinity',
+    updated_at          timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT pk_dds_etl_checkpoint
+        PRIMARY KEY (exchange_name, symbol, interval_code)
+);
+
+CREATE TABLE IF NOT EXISTS dds.etl_run (
+    run_id              bigserial   PRIMARY KEY,
+    exchange_name       text        NOT NULL,
+    symbol              text        NOT NULL,
+    interval_code       text        NOT NULL,
+    as_of               timestamptz NOT NULL,
+    source_count        integer     NOT NULL DEFAULT 0,
+    inserted_count      integer     NOT NULL DEFAULT 0,
+    rejected_count      integer     NOT NULL DEFAULT 0,
+    deferred_count      integer     NOT NULL DEFAULT 0,
+    status              text        NOT NULL,
+    error_message       text,
+    started_at          timestamptz NOT NULL DEFAULT clock_timestamp(),
+    completed_at        timestamptz,
+    CONSTRAINT chk_dds_etl_run_status
+        CHECK (status IN ('running', 'success', 'failed'))
 );
 
 -- Indicators
@@ -99,6 +150,12 @@ CREATE INDEX IF NOT EXISTS idx_dds_candle_instrument_time
 
 CREATE INDEX IF NOT EXISTS idx_dds_candle_valid
     ON dds.candle (is_valid) WHERE is_valid = true;
+
+CREATE INDEX IF NOT EXISTS idx_dds_data_quality_event_source
+    ON dds.data_quality_event (exchange_name, symbol, interval_code, open_time DESC);
+
+CREATE INDEX IF NOT EXISTS idx_dds_etl_run_source
+    ON dds.etl_run (exchange_name, symbol, interval_code, started_at DESC);
 
 CREATE INDEX IF NOT EXISTS idx_dds_indicator_candle
     ON dds.indicator (candle_id, indicator_name);
