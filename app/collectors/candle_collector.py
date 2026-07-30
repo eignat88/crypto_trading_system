@@ -1,16 +1,38 @@
 import asyncio
-from datetime import datetime, timezone, timedelta
-from decimal import Decimal
-from typing import Optional
+import json
+from datetime import datetime, timedelta
 
 import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exchange.base_exchange import BaseExchange, Candle
 from app.database.connection import async_session_factory
+from app.exchange.base_exchange import BaseExchange, Candle
 
 logger = structlog.get_logger()
+
+INTERVAL_DURATIONS = {
+    "5m": timedelta(minutes=5),
+    "15m": timedelta(minutes=15),
+    "1h": timedelta(hours=1),
+    "4h": timedelta(hours=4),
+    "1d": timedelta(days=1),
+}
+
+
+def interval_duration(interval: str) -> timedelta:
+    """Return the exact duration used to advance a kline checkpoint."""
+    try:
+        return INTERVAL_DURATIONS[interval]
+    except KeyError as exc:
+        raise ValueError(f"Unsupported candle interval: {interval}") from exc
+
+
+def align_to_interval(value: datetime, duration: timedelta) -> datetime:
+    """Floor a timestamp to an exchange candle boundary."""
+    duration_seconds = int(duration.total_seconds())
+    aligned_seconds = int(value.timestamp()) // duration_seconds * duration_seconds
+    return datetime.fromtimestamp(aligned_seconds, tz=value.tzinfo)
 
 
 class CandleCollector:
@@ -28,8 +50,12 @@ class CandleCollector:
         batch_size: int = 1000,
     ) -> int:
         """Load historical candles with checkpoint support."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
         total_loaded = 0
-        current_start = start_date
+        duration = interval_duration(interval)
+        current_start = align_to_interval(start_date, duration)
+        page_size = min(batch_size, 1000)
 
         logger.info(
             "loading_started",
@@ -40,28 +66,40 @@ class CandleCollector:
         )
 
         while current_start < end_date:
+            # Bybit orders klines newest-first. A bounded inclusive window ensures
+            # that a full response cannot omit candles at the start of the page.
+            batch_end = min(
+                end_date,
+                current_start + duration * (page_size - 1),
+            )
             # Load batch
             candles = await self.exchange.get_candles(
                 symbol=symbol,
                 interval=interval,
                 start_time=current_start,
-                end_time=end_date,
-                limit=batch_size,
+                end_time=batch_end,
+                limit=page_size,
             )
 
             if not candles:
-                break
+                raise ValueError(
+                    f"Empty candle batch for expected range {current_start.isoformat()} "
+                    f"to {batch_end.isoformat()}"
+                )
+
+            candles.sort(key=lambda candle: candle.open_time)
+            self._validate_batch(candles, duration, current_start)
+            max_open_time = max(candle.open_time for candle in candles)
 
             # Store candles
             async with async_session_factory() as session:
-                loaded_count = await self._store_candles(session, candles)
+                async with session.begin():
+                    loaded_count = await self._store_candles(session, candles)
+                    await self._store_api_response(session, candles)
+                    await self._update_checkpoint(
+                        session, symbol, interval, current_start, max_open_time, loaded_count
+                    )
                 total_loaded += loaded_count
-
-                # Update checkpoint
-                last_candle_time = max(c.open_time for c in candles)
-                await self._update_checkpoint(
-                    session, symbol, interval, current_start, last_candle_time
-                )
 
             logger.info(
                 "batch_loaded",
@@ -70,11 +108,11 @@ class CandleCollector:
                 batch_size=len(candles),
                 loaded=loaded_count,
                 total=total_loaded,
-                current_time=candles[-1].open_time.isoformat(),
+                current_time=max_open_time.isoformat(),
             )
 
             # Move to next batch (start after last candle)
-            current_start = candles[-1].open_time + timedelta(seconds=1)
+            current_start = max_open_time + duration
 
             # Rate limiting
             await asyncio.sleep(0.1)
@@ -125,21 +163,62 @@ class CandleCollector:
                         "volume": candle.volume,
                         "quote_volume": candle.quote_volume,
                         "trade_count": candle.trade_count,
-                        "source_payload": None,
+                        "source_payload": (
+                            json.dumps(candle.source_payload)
+                            if candle.source_payload is not None
+                            else None
+                        ),
                     },
                 )
                 if result.rowcount > 0:
                     inserted += 1
-            except Exception as e:
-                logger.warning(
+            except Exception:
+                logger.exception(
                     "candle_store_error",
                     symbol=candle.symbol,
                     open_time=candle.open_time.isoformat(),
-                    error=str(e),
                 )
-
-        await session.commit()
+                raise
         return inserted
+
+    @staticmethod
+    def _validate_batch(
+        candles: list[Candle], duration: timedelta, expected_start: datetime
+    ) -> None:
+        times = [candle.open_time for candle in candles]
+        if len(times) != len(set(times)):
+            raise ValueError("Duplicate candle open_time in Bybit response")
+        if any(later <= earlier for earlier, later in zip(times, times[1:])):
+            raise ValueError("Candle open_time is not strictly monotonic")
+        expected_pairs = zip(times, times[1:])
+        if any(later - earlier != duration for earlier, later in expected_pairs):
+            raise ValueError("Gap detected in Bybit candle response")
+        if times[0] != expected_start:
+            raise ValueError(
+                f"Batch starts at {times[0].isoformat()}, expected {expected_start.isoformat()}"
+            )
+
+    async def _store_api_response(self, session: AsyncSession, candles: list[Candle]) -> None:
+        response_payload = getattr(candles, "response_payload", None)
+        if response_payload is None:
+            return
+        await session.execute(
+            text(
+                """
+                INSERT INTO raw_system.api_responses (
+                    exchange_name, endpoint, request_id, request_time,
+                    response_time, status_code, request_payload, response_payload
+                ) VALUES ('bybit', '/v5/market/kline', :request_id, :request_time,
+                          now(), 200, :request_payload, :response_payload)
+                """
+            ),
+            {
+                "request_id": getattr(candles, "request_id", None),
+                "request_time": getattr(candles, "request_time", None),
+                "request_payload": json.dumps(getattr(candles, "request_payload", None)),
+                "response_payload": json.dumps(response_payload),
+            },
+        )
 
     async def _update_checkpoint(
         self,
@@ -148,6 +227,7 @@ class CandleCollector:
         interval: str,
         start_time: datetime,
         end_time: datetime,
+        rows_loaded: int,
     ):
         """Update loading journal checkpoint."""
         await session.execute(
@@ -158,7 +238,7 @@ class CandleCollector:
                     start_time, end_time, rows_loaded, status, completed_at
                 ) VALUES (
                     :exchange_name, :symbol, :interval_code,
-                    :start_time, :end_time, 0, 'in_progress', now()
+                    :start_time, :end_time, :rows_loaded, 'success', now()
                 )
                 """
             ),
@@ -168,26 +248,22 @@ class CandleCollector:
                 "interval_code": interval,
                 "start_time": start_time,
                 "end_time": end_time,
+                "rows_loaded": rows_loaded,
             },
         )
-        await session.commit()
 
-    async def get_last_checkpoint(
-        self, symbol: str, interval: str
-    ) -> Optional[datetime]:
+    async def get_last_checkpoint(self, symbol: str, interval: str) -> datetime | None:
         """Get last successful checkpoint for resume."""
         async with async_session_factory() as session:
             result = await session.execute(
                 text(
                     """
-                    SELECT end_time
+                    SELECT max(end_time)
                     FROM raw_system.loading_journal
                     WHERE exchange_name = 'bybit'
                       AND symbol = :symbol
                       AND interval_code = :interval
                       AND status = 'success'
-                    ORDER BY completed_at DESC
-                    LIMIT 1
                     """
                 ),
                 {"symbol": symbol, "interval": interval},
@@ -203,7 +279,7 @@ class CandleCollector:
         end_time: datetime,
         rows_loaded: int,
         status: str = "success",
-        error_message: Optional[str] = None,
+        error_message: str | None = None,
     ):
         """Update checkpoint status."""
         async with async_session_factory() as session:
