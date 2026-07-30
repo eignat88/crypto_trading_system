@@ -1,6 +1,6 @@
 import pytest
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.backtest.portfolio import Portfolio
 from app.backtest.commission_model import CommissionModel, CommissionConfig
@@ -146,9 +146,10 @@ class TestBacktestEngine:
     def test_simple_buy_and_hold(self):
         # Create simple uptrend data
         candles = []
+        base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
         for i in range(100):
             candles.append({
-                "open_time": datetime(2024, 1, 1, i, tzinfo=timezone.utc),
+                "open_time": base_time + timedelta(hours=i),
                 "symbol": "BTCUSDT",
                 "open": Decimal("100") + Decimal(str(i)),
                 "high": Decimal("101") + Decimal(str(i)),
