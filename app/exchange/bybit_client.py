@@ -1,137 +1,180 @@
 import asyncio
 import hashlib
 import hmac
+import json
 import time
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Any, cast
 from urllib.parse import urlencode
 
 import httpx
 import structlog
 
-from app.config.settings import settings
+from app.config.settings import TradingMode, settings
 from app.exchange.base_exchange import BaseExchange, Candle, CandleBatch, Instrument
+from app.exchange.exceptions import (
+    ExchangeAPIRejectError,
+    ExchangeAuthError,
+    ExchangeRateLimitError,
+    ExchangeTimeoutError,
+    UnknownOrderStateError,
+)
 
 logger = structlog.get_logger()
 
 
 class BybitClient(BaseExchange):
-    """Bybit exchange client implementation."""
+    """Bybit V5 client with idempotency-safe order submission."""
 
     BASE_URL = "https://api.bybit.com"
+    RECV_WINDOW = 5_000
+    MAX_GET_ATTEMPTS = 3
+    AUTH_ERROR_CODES = {10003, 10004, 10005, 10007, 10010}
+    RATE_LIMIT_CODES = {10006, 10429}
+    INTERVAL_MAP = {"5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"}
 
-    # Interval mapping
-    INTERVAL_MAP = {
-        "5m": "5",
-        "15m": "15",
-        "1h": "60",
-        "4h": "240",
-        "1d": "D",
-    }
-
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_key = settings.exchange_api_key
         self.api_secret = settings.exchange_api_secret
+        self._live_key_checked = False
         self.client = httpx.AsyncClient(
             base_url=self.BASE_URL,
             timeout=30.0,
             limits=httpx.Limits(max_connections=100),
         )
 
-    def _generate_signature(
-        self, timestamp: int, params: dict | None = None, body: str = ""
-    ) -> str:
-        """Generate HMAC signature for authenticated requests."""
-        param_str = ""
-        if params:
-            param_str = urlencode(sorted(params.items()))
+    async def close(self) -> None:
+        """Release the underlying HTTP connection pool."""
+        await self.client.aclose()
 
-        sign_str = f"{timestamp}{self.api_key}{param_str}{body}"
-        return hmac.new(self.api_secret.encode(), sign_str.encode(), hashlib.sha256).hexdigest()
+    def _generate_signature(self, timestamp: int, payload: str = "") -> str:
+        """Sign ``timestamp + key + recv_window + query/body`` per Bybit V5."""
+        plain_text = f"{timestamp}{self.api_key}{self.RECV_WINDOW}{payload}"
+        return hmac.new(self.api_secret.encode(), plain_text.encode(), hashlib.sha256).hexdigest()
 
-    def _get_headers(self, timestamp: int, sign: str) -> dict:
+    def _get_headers(self, timestamp: int, signature: str) -> dict[str, str]:
         return {
             "X-BAPI-API-KEY": self.api_key,
-            "X-BAPI-SIGN": sign,
+            "X-BAPI-SIGN": signature,
             "X-BAPI-TIMESTAMP": str(timestamp),
-            "X-BAPI-RECV-WINDOW": "5000",
+            "X-BAPI-RECV-WINDOW": str(self.RECV_WINDOW),
         }
 
-    async def _request(
-        self,
-        method: str,
-        path: str,
-        params: dict | None = None,
-        authenticated: bool = False,
-    ) -> dict:
-        """Make API request with retry logic."""
-        _, data, _ = await self._request_raw(method, path, params, authenticated)
-        return data.get("result", {})
+    @staticmethod
+    def _query_string(params: dict[str, Any] | None) -> str:
+        return urlencode(sorted((params or {}).items()))
 
-    async def _request_raw(
-        self,
-        method: str,
-        path: str,
-        params: dict | None = None,
-        authenticated: bool = False,
-    ) -> tuple[httpx.Response, dict, datetime]:
-        """Return the complete response and request time while retaining retries."""
-        for attempt in range(3):
+    @staticmethod
+    def _json_body(body: dict[str, Any]) -> str:
+        return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
+
+    def _raise_api_error(self, data: dict[str, Any], path: str) -> None:
+        code = data.get("retCode")
+        if code == 0:
+            return
+        message = str(data.get("retMsg") or "Bybit API rejected request")
+        logger.warning("bybit_api_error", code=code, msg=message, path=path)
+        if code in self.AUTH_ERROR_CODES:
+            raise ExchangeAuthError(message)
+        if code in self.RATE_LIMIT_CODES:
+            raise ExchangeRateLimitError(message)
+        raise ExchangeAPIRejectError(message, code=code if isinstance(code, int) else None)
+
+    async def _get_raw(
+        self, path: str, params: dict[str, Any] | None = None, *, private: bool = False
+    ) -> tuple[httpx.Response, dict[str, Any], datetime]:
+        """Issue a public/private GET; only this read-only path is retried."""
+        query = self._query_string(params)
+        for attempt in range(self.MAX_GET_ATTEMPTS):
+            timestamp = int(time.time() * 1000)
+            headers = (
+                self._get_headers(timestamp, self._generate_signature(timestamp, query))
+                if private
+                else {}
+            )
             try:
                 request_time = datetime.now(UTC)
-                timestamp = int(time.time() * 1000)
-                headers = {}
-
-                if authenticated:
-                    sign = self._generate_signature(timestamp, params)
-                    headers = self._get_headers(timestamp, sign)
-
-                response = await self.client.request(method, path, params=params, headers=headers)
+                # Send the exact canonical query string that was signed. Passing the
+                # original mapping could preserve a different insertion order.
+                response = await self.client.get(path, params=query or None, headers=headers)
+                if response.status_code == 429:
+                    raise ExchangeRateLimitError("Bybit HTTP rate limit")
+                if response.status_code in {401, 403}:
+                    raise ExchangeAuthError("Bybit authentication failed")
                 response.raise_for_status()
                 data = response.json()
-
-                if data.get("retCode") != 0:
-                    logger.warning(
-                        "bybit_api_error",
-                        code=data.get("retCode"),
-                        msg=data.get("retMsg"),
-                        path=path,
-                    )
-                    raise ValueError(f"Bybit API error: {data.get('retMsg')}")
-
+                self._raise_api_error(data, path)
                 return response, data, request_time
-
-            except httpx.HTTPStatusError as e:
-                if e.response.status_code == 429:  # Rate limit
-                    wait_time = min(2**attempt * 1000, 10000)
-                    logger.warning("rate_limit_hit", wait_ms=wait_time)
-                    await asyncio.sleep(wait_time / 1000)
-                    continue
+            except ExchangeAuthError:
                 raise
-            except Exception as e:
-                if attempt == 2:
-                    raise
-                logger.warning("request_retry", attempt=attempt + 1, error=str(e))
-                await asyncio.sleep(1)
-                continue
+            except (httpx.TimeoutException, httpx.NetworkError) as exc:
+                failure: Exception = ExchangeTimeoutError(str(exc))
+            except ExchangeRateLimitError as exc:
+                failure = exc
+            except (httpx.HTTPStatusError, json.JSONDecodeError) as exc:
+                raise ExchangeAPIRejectError(str(exc)) from exc
+            if attempt + 1 == self.MAX_GET_ATTEMPTS:
+                raise failure
+            await asyncio.sleep(min(2**attempt, 4))
+        raise RuntimeError("GET retry loop exited unexpectedly")
 
-        raise RuntimeError("Bybit request retry loop exited unexpectedly")
+    async def _get(
+        self, path: str, params: dict[str, Any] | None = None, *, private: bool = False
+    ) -> dict[str, Any]:
+        _, data, _ = await self._get_raw(path, params, private=private)
+        return cast(dict[str, Any], data.get("result", {}))
+
+    async def _trade_post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+        """Send a signed JSON trading request exactly once."""
+        encoded = self._json_body(body)
+        timestamp = int(time.time() * 1000)
+        headers = self._get_headers(timestamp, self._generate_signature(timestamp, encoded))
+        headers["Content-Type"] = "application/json"
+        try:
+            response = await self.client.post(path, content=encoded.encode(), headers=headers)
+            if response.status_code == 429:
+                raise ExchangeRateLimitError("Bybit HTTP rate limit")
+            if response.status_code in {401, 403}:
+                raise ExchangeAuthError("Bybit authentication failed")
+            if response.status_code == 408 or response.status_code >= 500:
+                raise ExchangeTimeoutError(
+                    f"Bybit returned an indeterminate HTTP {response.status_code}"
+                )
+            response.raise_for_status()
+            try:
+                data = response.json()
+            except json.JSONDecodeError as exc:
+                raise ExchangeTimeoutError("Bybit returned an indeterminate response") from exc
+            self._raise_api_error(data, path)
+            return cast(dict[str, Any], data.get("result", {}))
+        except (
+            ExchangeAuthError,
+            ExchangeRateLimitError,
+            ExchangeAPIRejectError,
+            ExchangeTimeoutError,
+        ):
+            raise
+        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+            raise ExchangeTimeoutError(str(exc)) from exc
+        except httpx.HTTPStatusError as exc:
+            raise ExchangeAPIRejectError(str(exc)) from exc
+
+    async def _ensure_live_key_safe(self) -> None:
+        if settings.trading_mode != TradingMode.LIVE or self._live_key_checked:
+            return
+        key_info = await self._get("/v5/user/query-api", private=True)
+        wallet_permissions = key_info.get("permissions", {}).get("Wallet", [])
+        if any("withdraw" in permission.lower() for permission in wallet_permissions):
+            raise ExchangeAuthError("Live API key must not have withdrawal permission")
+        self._live_key_checked = True
 
     async def get_instruments(self) -> list[Instrument]:
-        """Get list of available instruments."""
-        result = await self._request("GET", "/v5/market/instruments-info", {"category": "spot"})
-
-        instruments = []
-        for item in result.get("list", []):
-            instruments.append(
-                Instrument(
-                    symbol=item["symbol"],
-                    base_currency=item["baseCoin"],
-                    quote_currency=item["quoteCoin"],
-                    is_active=item["status"] == "Trading",
-                )
-            )
-        return instruments
+        result = await self._get("/v5/market/instruments-info", {"category": "spot"})
+        return [
+            Instrument(i["symbol"], i["baseCoin"], i["quoteCoin"], i["status"] == "Trading")
+            for i in result.get("list", [])
+        ]
 
     async def get_candles(
         self,
@@ -141,86 +184,72 @@ class BybitClient(BaseExchange):
         end_time: datetime,
         limit: int = 1000,
     ) -> list[Candle]:
-        """Get historical candles."""
-        interval_code = self.INTERVAL_MAP.get(interval, interval)
-
         params = {
             "category": "spot",
             "symbol": symbol,
-            "interval": interval_code,
+            "interval": self.INTERVAL_MAP.get(interval, interval),
             "start": int(start_time.timestamp() * 1000),
             "end": int(end_time.timestamp() * 1000),
             "limit": min(limit, 1000),
         }
-
-        response, payload, request_time = await self._request_raw("GET", "/v5/market/kline", params)
-        result = payload.get("result", {})
-
-        candles = []
-        for item in result.get("list", []):
-            # Bybit returns: [startTime, open, high, low, close, volume, turnover]
-            open_time = datetime.fromtimestamp(int(item[0]) / 1000, tz=UTC)
-
-            candles.append(
-                Candle(
-                    exchange_name="bybit",
-                    symbol=symbol,
-                    interval_code=interval,
-                    open_time=open_time,
-                    close_time=None,  # Will be calculated
-                    open_price=Decimal(item[1]),
-                    high_price=Decimal(item[2]),
-                    low_price=Decimal(item[3]),
-                    close_price=Decimal(item[4]),
-                    volume=Decimal(item[5]),
-                    quote_volume=Decimal(item[6]) if item[6] else None,
-                    trade_count=None,
-                    source_payload=item,
-                )
+        response, payload, request_time = await self._get_raw("/v5/market/kline", params)
+        candles = [
+            Candle(
+                "bybit",
+                symbol,
+                interval,
+                datetime.fromtimestamp(int(i[0]) / 1000, tz=UTC),
+                None,
+                Decimal(i[1]),
+                Decimal(i[2]),
+                Decimal(i[3]),
+                Decimal(i[4]),
+                Decimal(i[5]),
+                Decimal(i[6]) if i[6] else None,
+                None,
+                i,
             )
-
+            for i in payload.get("result", {}).get("list", [])
+        ]
         candles.sort(key=lambda candle: candle.open_time)
-        request_id = response.headers.get("Traceid") or response.headers.get("X-Request-Id")
         return CandleBatch(
             candles,
-            request_id=request_id,
+            request_id=response.headers.get("Traceid") or response.headers.get("X-Request-Id"),
             request_time=request_time,
             request_payload=params,
             response_payload=payload,
         )
 
     async def get_current_price(self, symbol: str) -> Decimal:
-        """Get current price for a symbol."""
-        result = await self._request(
-            "GET", "/v5/market/tickers", {"category": "spot", "symbol": symbol}
-        )
-
-        tickers = result.get("list", [])
+        tickers = (
+            await self._get("/v5/market/tickers", {"category": "spot", "symbol": symbol})
+        ).get("list", [])
         if not tickers:
-            raise ValueError(f"No ticker found for {symbol}")
-
+            raise ExchangeAPIRejectError(f"No ticker found for {symbol}")
         return Decimal(tickers[0]["lastPrice"])
 
     async def get_balance(self) -> dict[str, Decimal]:
-        """Get account balance."""
-        result = await self._request(
-            "GET", "/v5/account/wallet-balance", {"accountType": "UNIFIED"}, authenticated=True
+        result = await self._get(
+            "/v5/account/wallet-balance", {"accountType": "UNIFIED"}, private=True
         )
+        return {
+            coin["coin"]: Decimal(coin["walletBalance"])
+            for coin in result.get("list", [{}])[0].get("coin", [])
+        }
 
-        balances = {}
-        for coin in result.get("list", [{}])[0].get("coin", []):
-            balances[coin["coin"]] = Decimal(coin["walletBalance"])
-
-        return balances
-
-    async def get_open_orders(self, symbol: str | None = None) -> list[dict]:
-        """Get open orders."""
+    async def get_open_orders(self, symbol: str | None = None) -> list[dict[str, Any]]:
         params = {"category": "spot", "orderStatus": "New"}
         if symbol:
             params["symbol"] = symbol
+        orders = (await self._get("/v5/order/realtime", params, private=True)).get("list", [])
+        return cast(list[dict[str, Any]], orders)
 
-        result = await self._request("GET", "/v5/order/realtime", params, authenticated=True)
-        return result.get("list", [])
+    async def get_order_by_client_id(self, client_order_id: str) -> dict[str, Any] | None:
+        result = await self._get(
+            "/v5/order/realtime", {"category": "spot", "orderLinkId": client_order_id}, private=True
+        )
+        orders = cast(list[dict[str, Any]], result.get("list", []))
+        return orders[0] if orders else None
 
     async def place_order(
         self,
@@ -228,58 +257,52 @@ class BybitClient(BaseExchange):
         side: str,
         order_type: str,
         quantity: Decimal,
+        client_order_id: str,
         price: Decimal | None = None,
-        client_order_id: str | None = None,
-    ) -> dict:
-        """Place a new order."""
-        params = {
+    ) -> dict[str, Any]:
+        if not client_order_id or not client_order_id.strip():
+            raise ValueError("client_order_id is required for every order")
+        await self._ensure_live_key_safe()
+        body = {
             "category": "spot",
             "symbol": symbol,
             "side": side,
             "orderType": order_type,
             "qty": str(quantity),
+            "orderLinkId": client_order_id,
         }
-
         if price is not None:
-            params["price"] = str(price)
+            body["price"] = str(price)
+        try:
+            return await self._trade_post("/v5/order/create", body)
+        except ExchangeTimeoutError:
+            try:
+                existing = await self.get_order_by_client_id(client_order_id)
+            except Exception as lookup_error:
+                raise UnknownOrderStateError(client_order_id) from lookup_error
+            if existing is not None:
+                return existing
+            raise UnknownOrderStateError(client_order_id)
 
-        if client_order_id:
-            params["orderLinkId"] = client_order_id
-
-        return await self._request("POST", "/v5/order/create", params, authenticated=True)
-
-    async def cancel_order(self, order_id: str) -> dict:
-        """Cancel an order."""
-        params = {
-            "category": "spot",
-            "orderId": order_id,
-        }
-        return await self._request("POST", "/v5/order/cancel", params, authenticated=True)
+    async def cancel_order(self, order_id: str) -> dict[str, Any]:
+        await self._ensure_live_key_safe()
+        return await self._trade_post("/v5/order/cancel", {"category": "spot", "orderId": order_id})
 
     async def get_executions(
-        self,
-        symbol: str | None = None,
-        start_time: datetime | None = None,
-    ) -> list[dict]:
-        """Get trade executions."""
-        params = {"category": "spot"}
+        self, symbol: str | None = None, start_time: datetime | None = None
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"category": "spot"}
         if symbol:
             params["symbol"] = symbol
         if start_time:
             params["startTime"] = int(start_time.timestamp() * 1000)
-
-        result = await self._request("GET", "/v5/execution/list", params, authenticated=True)
-        return result.get("list", [])
+        executions = (await self._get("/v5/execution/list", params, private=True)).get("list", [])
+        return cast(list[dict[str, Any]], executions)
 
     async def health_check(self) -> bool:
-        """Check if exchange API is available."""
         try:
-            await self._request("GET", "/v5/market/time")
+            await self._get("/v5/market/time")
             return True
-        except Exception as e:
-            logger.error("health_check_failed", error=str(e))
+        except Exception as exc:
+            logger.error("health_check_failed", error=str(exc))
             return False
-
-    async def close(self):
-        """Close the HTTP client."""
-        await self.client.aclose()
