@@ -1,12 +1,14 @@
-from decimal import Decimal
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field, is_dataclass
 from datetime import datetime
-from typing import Optional, Callable
+from decimal import Decimal
+
 import structlog
 
+from app.backtest.commission_model import CommissionConfig, CommissionModel
 from app.backtest.portfolio import Portfolio
-from app.backtest.commission_model import CommissionModel, CommissionConfig
-from app.backtest.slippage_model import SlippageModel, SlippageConfig
+from app.backtest.slippage_model import SlippageConfig, SlippageModel
+from app.risk.risk_engine import RiskEngine, RiskEvent
 
 logger = structlog.get_logger()
 
@@ -29,7 +31,7 @@ class BacktestResult:
     losing_trades: int = 0
     total_pnl: Decimal = Decimal("0")
     max_drawdown: Decimal = Decimal("0")
-    sharpe_ratio: Optional[Decimal] = None
+    sharpe_ratio: Decimal | None = None
     win_rate: Decimal = Decimal("0")
     profit_factor: Decimal = Decimal("0")
     average_trade: Decimal = Decimal("0")
@@ -42,7 +44,7 @@ class BacktestResult:
 class BacktestEngine:
     """Engine for running backtests."""
 
-    def __init__(self, config: BacktestConfig = None):
+    def __init__(self, config: BacktestConfig = None, risk_engine: RiskEngine = None):
         self.config = config or BacktestConfig()
         self.portfolio = Portfolio(self.config.initial_balance)
         self.commission_model = CommissionModel(self.config.commission_config)
@@ -50,6 +52,7 @@ class BacktestEngine:
             self.config.slippage_config,
             seed=self.config.random_seed,
         )
+        self.risk_engine = risk_engine or RiskEngine()
 
     def run(
         self,
@@ -86,6 +89,7 @@ class BacktestEngine:
                 {candle["symbol"]: current_price},
                 timestamp,
             )
+            self.risk_engine.update_equity(self.portfolio.total_equity)
 
             # Check stop levels
             symbols_to_close = self.portfolio.check_stops(
@@ -99,6 +103,8 @@ class BacktestEngine:
 
             # Process signals
             if signals:
+                if isinstance(signals, dict) or is_dataclass(signals):
+                    signals = [signals]
                 for signal in signals:
                     self._process_signal(signal, candle, timestamp)
 
@@ -108,7 +114,7 @@ class BacktestEngine:
                 peak_equity = current_equity
 
             drawdown = (peak_equity - current_equity) / peak_equity
-            if drawdown > self.portfolio.max_drawdown if hasattr(self.portfolio, 'max_drawdown') else Decimal("0"):
+            if drawdown > self.portfolio.max_drawdown:
                 self.portfolio.max_drawdown = drawdown
 
         # Close any remaining positions at last price
@@ -133,19 +139,24 @@ class BacktestEngine:
 
     def _process_signal(self, signal: dict, candle: dict, timestamp: datetime):
         """Process a trading signal."""
+        if is_dataclass(signal) and not isinstance(signal, type):
+            signal = asdict(signal)
+        if not isinstance(signal, dict):
+            raise TypeError("Strategy signals must be dictionaries or dataclass instances")
+
         action = signal.get("action")
         symbol = signal.get("symbol", candle.get("symbol"))
         price = signal.get("price", candle["close"])
         quantity = signal.get("quantity")
+        stop_loss = signal.get("stop_loss")
+        take_profit = signal.get("take_profit")
 
         if action == "buy" and quantity:
-            self._open_position(symbol, "long", price, quantity, timestamp)
+            self._open_position(symbol, "long", price, quantity, timestamp, stop_loss, take_profit)
         elif action == "sell" and quantity:
             self._close_position(symbol, price, timestamp)
         elif action == "open_long" and quantity:
-            self._open_position(symbol, "long", price, quantity, timestamp)
-        elif action == "open_short" and quantity:
-            self._open_position(symbol, "short", price, quantity, timestamp)
+            self._open_position(symbol, "long", price, quantity, timestamp, stop_loss, take_profit)
         elif action == "close":
             self._close_position(symbol, price, timestamp)
 
@@ -156,6 +167,8 @@ class BacktestEngine:
         price: Decimal,
         quantity: Decimal,
         timestamp: datetime,
+        stop_loss: Decimal | None = None,
+        take_profit: Decimal | None = None,
     ):
         """Open a new position with slippage and commission."""
         # Apply slippage
@@ -167,6 +180,35 @@ class BacktestEngine:
         commission = self.commission_model.calculate_commission(
             quantity, execution_price, is_maker=False
         )
+
+        current_positions = {
+            key: {
+                "symbol": position.symbol,
+                "value": position.position_value,
+            }
+            for key, position in self.portfolio.positions.items()
+        }
+        risk_result = self.risk_engine.check_trade(
+            symbol=symbol,
+            side="buy",
+            quantity=quantity,
+            price=execution_price,
+            current_balance=self.portfolio.balance,
+            current_positions=current_positions,
+            total_capital=self.portfolio.total_equity,
+        )
+        if not risk_result.approved:
+            only_position_size_exceeded = (
+                risk_result.events == [RiskEvent.MAX_POSITION_SIZE]
+                and len(risk_result.reasons) == 2
+                and risk_result.adjusted_quantity is not None
+            )
+            if not only_position_size_exceeded:
+                return
+            quantity = risk_result.adjusted_quantity
+            commission = self.commission_model.calculate_commission(
+                quantity, execution_price, is_maker=False
+            )
 
         # Check if we have enough balance
         cost = execution_price * quantity + commission
@@ -180,6 +222,8 @@ class BacktestEngine:
             price=execution_price,
             quantity=quantity,
             timestamp=timestamp,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
             commission=commission,
         )
 
@@ -241,8 +285,8 @@ class BacktestEngine:
         result.average_trade = result.total_pnl / Decimal(str(result.total_trades))
 
         # Profit factor
-        if losses and sum(abs(l) for l in losses) > 0:
-            result.profit_factor = sum(wins) / sum(abs(l) for l in losses)
+        if losses and sum(abs(loss) for loss in losses) > 0:
+            result.profit_factor = sum(wins) / sum(abs(loss) for loss in losses)
 
         # Max consecutive losses
         consecutive_losses = 0
@@ -256,7 +300,6 @@ class BacktestEngine:
         result.max_consecutive_losses = max_consecutive
 
         # Max drawdown
-        if hasattr(self.portfolio, 'max_drawdown'):
-            result.max_drawdown = self.portfolio.max_drawdown
+        result.max_drawdown = self.portfolio.max_drawdown
 
         return result

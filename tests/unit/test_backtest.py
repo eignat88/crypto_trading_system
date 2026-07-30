@@ -1,11 +1,12 @@
-import pytest
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from datetime import datetime, timedelta, timezone
 
+from app.backtest.backtest_engine import BacktestConfig, BacktestEngine
+from app.backtest.commission_model import CommissionModel
 from app.backtest.portfolio import Portfolio
-from app.backtest.commission_model import CommissionModel, CommissionConfig
-from app.backtest.slippage_model import SlippageModel, SlippageConfig
-from app.backtest.backtest_engine import BacktestEngine, BacktestConfig
+from app.backtest.slippage_model import SlippageModel
+from app.risk.risk_engine import RiskConfig, RiskEngine
+from app.strategies.base_strategy import Signal
 
 
 class TestPortfolio:
@@ -23,7 +24,7 @@ class TestPortfolio:
             side="long",
             price=Decimal("100"),
             quantity=Decimal("10"),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
         assert result is True
         assert self.portfolio.has_position("BTCUSDT")
@@ -35,7 +36,7 @@ class TestPortfolio:
             side="long",
             price=Decimal("1000"),
             quantity=Decimal("100"),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
         assert result is False
         assert not self.portfolio.has_position("BTCUSDT")
@@ -46,15 +47,15 @@ class TestPortfolio:
             side="long",
             price=Decimal("100"),
             quantity=Decimal("10"),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
-        
+
         pnl = self.portfolio.close_position(
             symbol="BTCUSDT",
             price=Decimal("110"),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
-        
+
         assert pnl is not None
         assert pnl == Decimal("100")  # (110 - 100) * 10
         assert not self.portfolio.has_position("BTCUSDT")
@@ -66,16 +67,41 @@ class TestPortfolio:
             side="long",
             price=Decimal("100"),
             quantity=Decimal("10"),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
-        
+
         self.portfolio.update_positions(
             {"BTCUSDT": Decimal("110")},
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
         )
-        
+
         position = self.portfolio.get_position("BTCUSDT")
         assert position.unrealized_pnl == Decimal("100")
+        assert self.portfolio.total_equity == Decimal("5100")
+
+    def test_dca_merges_quantity_and_weighted_entry(self):
+        now = datetime.now(UTC)
+        self.portfolio.open_position(
+            "BTCUSDT", "long", Decimal("100"), Decimal("10"), now,
+            stop_loss=Decimal("90"), take_profit=Decimal("120"),
+        )
+        self.portfolio.open_position(
+            "BTCUSDT", "long", Decimal("80"), Decimal("10"), now,
+        )
+
+        position = self.portfolio.get_position("BTCUSDT")
+        assert len(self.portfolio.positions) == 1
+        assert position.quantity == Decimal("20")
+        assert position.entry_price == Decimal("90")
+        assert position.stop_loss == Decimal("90")
+        assert position.take_profit == Decimal("120")
+
+    def test_spot_portfolio_rejects_short(self):
+        opened = self.portfolio.open_position(
+            "BTCUSDT", "short", Decimal("100"), Decimal("10"),
+            datetime.now(UTC),
+        )
+        assert opened is False
 
     def test_check_stops(self):
         self.portfolio.open_position(
@@ -83,15 +109,15 @@ class TestPortfolio:
             side="long",
             price=Decimal("100"),
             quantity=Decimal("10"),
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             stop_loss=Decimal("95"),
             take_profit=Decimal("110"),
         )
-        
+
         # Check stop-loss
         symbols = self.portfolio.check_stops({"BTCUSDT": Decimal("94")})
         assert "BTCUSDT" in symbols
-        
+
         # Check take-profit
         symbols = self.portfolio.check_stops({"BTCUSDT": Decimal("111")})
         assert "BTCUSDT" in symbols
@@ -146,7 +172,7 @@ class TestBacktestEngine:
     def test_simple_buy_and_hold(self):
         # Create simple uptrend data
         candles = []
-        base_time = datetime(2024, 1, 1, tzinfo=timezone.utc)
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
         for i in range(100):
             candles.append({
                 "open_time": base_time + timedelta(hours=i),
@@ -167,3 +193,38 @@ class TestBacktestEngine:
         assert result.total_trades == 1  # Only the buy
         # Balance should be different from initial (could be higher or lower depending on slippage)
         assert result.portfolio.balance != Decimal("5000")
+
+    def test_dataclass_signal_preserves_stop_levels(self):
+        now = datetime.now(UTC)
+        candle = {
+            "open_time": now, "symbol": "BTCUSDT", "open": Decimal("100"),
+            "high": Decimal("100"), "low": Decimal("100"), "close": Decimal("100"),
+            "volume": Decimal("1"),
+        }
+        risk = RiskEngine(RiskConfig(max_position_size=Decimal("1")))
+        engine = BacktestEngine(BacktestConfig(), risk_engine=risk)
+
+        signal = Signal(
+            "open_long", "BTCUSDT", Decimal("100"), Decimal("1"), now,
+            stop_loss=Decimal("95"), take_profit=Decimal("110"),
+        )
+        engine._process_signal(signal, candle, now)
+
+        position = engine.portfolio.get_position("BTCUSDT")
+        assert position.stop_loss == Decimal("95")
+        assert position.take_profit == Decimal("110")
+
+    def test_risk_engine_rejects_trade(self):
+        risk = RiskEngine(RiskConfig(max_position_size=Decimal("0.01")))
+        risk.set_emergency_stop(True, "test")
+        engine = BacktestEngine(BacktestConfig(), risk_engine=risk)
+        candle = {
+            "open_time": datetime.now(UTC), "symbol": "BTCUSDT",
+            "close": Decimal("100"),
+        }
+
+        engine.run(
+            [candle],
+            lambda *_: [{"action": "buy", "symbol": "BTCUSDT", "quantity": Decimal("1")}],
+        )
+        assert engine.portfolio.trade_history == []
