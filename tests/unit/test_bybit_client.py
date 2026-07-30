@@ -55,6 +55,41 @@ async def test_trade_post_signs_and_sends_json_body(monkeypatch: pytest.MonkeyPa
 
 
 @async_test
+async def test_trade_post_treats_protocol_failure_as_indeterminate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = BybitClient()
+
+    async def post(path: str, **kwargs: object) -> httpx.Response:
+        raise httpx.RemoteProtocolError("peer disconnected")
+
+    monkeypatch.setattr(client.client, "post", post)
+
+    with pytest.raises(ExchangeTimeoutError, match="peer disconnected"):
+        await client._trade_post("/v5/order/create", {"symbol": "BTCUSDT"})
+
+
+@pytest.mark.parametrize("ret_code", [10000, 10016])
+@async_test
+async def test_trade_post_treats_server_error_codes_as_indeterminate(
+    monkeypatch: pytest.MonkeyPatch, ret_code: int
+) -> None:
+    client = BybitClient()
+
+    async def post(path: str, **kwargs: object) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"retCode": ret_code, "retMsg": "Server error"},
+            request=httpx.Request("POST", "https://api.bybit.com" + path),
+        )
+
+    monkeypatch.setattr(client.client, "post", post)
+
+    with pytest.raises(ExchangeTimeoutError, match="Server error"):
+        await client._trade_post("/v5/order/create", {"symbol": "BTCUSDT"})
+
+
+@async_test
 async def test_order_timeout_is_reconciled_without_resubmission(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
