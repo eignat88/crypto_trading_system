@@ -87,13 +87,29 @@ class TestATR:
 
 class TestVolatility:
     def test_historical_volatility(self):
-        # Create some price data with volatility
+        # Create price data with varying positive and negative returns
+        percentage_changes = [
+            Decimal("0.01"),
+            Decimal("-0.02"),
+            Decimal("0.03"),
+            Decimal("-0.01"),
+        ]
         closes = [Decimal("100")]
         for i in range(1, 30):
-            closes.append(closes[-1] * Decimal("1.01"))
+            change = percentage_changes[(i - 1) % len(percentage_changes)]
+            closes.append(closes[-1] * (Decimal("1") + change))
+
         result = calculate_historical_volatility(closes, 20)
         assert result is not None
         assert result > 0
+
+    def test_historical_volatility_with_constant_returns(self):
+        constant_return_closes = [Decimal("100")]
+        for _ in range(1, 30):
+            constant_return_closes.append(constant_return_closes[-1] * Decimal("1.01"))
+
+        constant_return_result = calculate_historical_volatility(constant_return_closes, 20)
+        assert constant_return_result == 0
 
     def test_volatility_regime(self):
         assert calculate_volatility_regime(Decimal("0.2")) == "LOW"
