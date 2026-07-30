@@ -157,6 +157,38 @@ async def test_large_range_is_split_into_bounded_forward_windows(
 
 
 @async_test
+async def test_open_final_candle_is_not_stored_or_checkpointed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Exchange:
+        def __init__(self) -> None:
+            self.calls: list[tuple[datetime, datetime]] = []
+
+        async def get_candles(self, **kwargs: Any) -> CandleBatch:
+            start, end = kwargs["start_time"], kwargs["end_time"]
+            self.calls.append((start, end))
+            return CandleBatch([candle(start)])
+
+    session = Session()
+
+    async def no_sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr(collector_module, "async_session_factory", lambda: session)
+    monkeypatch.setattr(collector_module.asyncio, "sleep", no_sleep)
+    exchange = Exchange()
+
+    loaded = await CandleCollector(exchange).load_historical_candles(
+        "BTCUSDT", "5m", START, START + timedelta(minutes=7)
+    )
+
+    assert loaded == 1
+    assert exchange.calls == [(START, START)]
+    checkpoint_calls = [params for sql, params in session.calls if "loading_journal" in sql]
+    assert checkpoint_calls[0]["end_time"] == START
+
+
+@async_test
 async def test_batch_provenance_and_checkpoint_roll_back_together(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

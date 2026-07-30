@@ -55,6 +55,11 @@ class CandleCollector:
         total_loaded = 0
         duration = interval_duration(interval)
         current_start = align_to_interval(start_date, duration)
+        # Treat end_date as an observation time, not as a candle open-time bound.
+        # The candle opening at the aligned boundary is still mutable until the
+        # following boundary, so only request intervals that have fully closed.
+        closed_end = min(end_date, datetime.now(end_date.tzinfo))
+        first_open_candle = align_to_interval(closed_end, duration)
         page_size = min(batch_size, 1000)
 
         logger.info(
@@ -65,11 +70,11 @@ class CandleCollector:
             end=end_date.isoformat(),
         )
 
-        while current_start < end_date:
+        while current_start < first_open_candle:
             # Bybit orders klines newest-first. A bounded inclusive window ensures
             # that a full response cannot omit candles at the start of the page.
             batch_end = min(
-                end_date,
+                first_open_candle - duration,
                 current_start + duration * (page_size - 1),
             )
             # Load batch
@@ -89,10 +94,6 @@ class CandleCollector:
 
             candles.sort(key=lambda candle: candle.open_time)
             self._validate_batch(candles, duration, current_start)
-            max_open_time = max(candle.open_time for candle in candles)
-
-            candles.sort(key=lambda candle: candle.open_time)
-            self._validate_batch(candles, duration, previous_open_time)
             max_open_time = max(candle.open_time for candle in candles)
 
             # Store candles
