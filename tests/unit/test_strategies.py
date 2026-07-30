@@ -1,9 +1,8 @@
-import pytest
+from datetime import UTC, datetime
 from decimal import Decimal
-from datetime import datetime, timezone
 
-from app.strategies.trend_dca import TrendDCAStrategy, DCAConfig
 from app.indicators.market_regime import MarketRegime
+from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
 
 class TestTrendDCAStrategy:
@@ -14,7 +13,7 @@ class TestTrendDCAStrategy:
         candle = {
             "symbol": "BTCUSDT",
             "close": Decimal("105"),
-            "open_time": datetime.now(timezone.utc),
+            "open_time": datetime.now(UTC),
         }
 
         indicators = {
@@ -39,7 +38,7 @@ class TestTrendDCAStrategy:
         candle = {
             "symbol": "BTCUSDT",
             "close": Decimal("105"),
-            "open_time": datetime.now(timezone.utc),
+            "open_time": datetime.now(UTC),
         }
 
         indicators = {
@@ -61,7 +60,7 @@ class TestTrendDCAStrategy:
         candle = {
             "symbol": "BTCUSDT",
             "close": Decimal("105"),
-            "open_time": datetime.now(timezone.utc),
+            "open_time": datetime.now(UTC),
         }
 
         indicators = {
@@ -83,7 +82,7 @@ class TestTrendDCAStrategy:
         candle = {
             "symbol": "BTCUSDT",
             "close": Decimal("105"),
-            "open_time": datetime.now(timezone.utc),
+            "open_time": datetime.now(UTC),
         }
 
         indicators = {
@@ -105,7 +104,7 @@ class TestTrendDCAStrategy:
         candle = {
             "symbol": "BTCUSDT",
             "close": Decimal("110"),
-            "open_time": datetime.now(timezone.utc),
+            "open_time": datetime.now(UTC),
         }
 
         indicators = {
@@ -128,7 +127,7 @@ class TestTrendDCAStrategy:
         candle = {
             "symbol": "BTCUSDT",
             "close": Decimal("95"),
-            "open_time": datetime.now(timezone.utc),
+            "open_time": datetime.now(UTC),
         }
 
         indicators = {
@@ -151,7 +150,7 @@ class TestTrendDCAStrategy:
         candle = {
             "symbol": "BTCUSDT",
             "close": Decimal("100"),
-            "open_time": datetime.now(timezone.utc),
+            "open_time": datetime.now(UTC),
         }
 
         indicators = {
@@ -170,6 +169,29 @@ class TestTrendDCAStrategy:
         assert signal is not None
         assert signal.action == "close"
         assert "Max holding period" in signal.reason
+
+    def test_trailing_stop_uses_high_watermark(self):
+        position = {
+            "entry_price": Decimal("100"),
+            "side": "long",
+            "quantity": Decimal("1"),
+            "unrealized_pnl_pct": Decimal("0.04"),
+        }
+        indicators = {"regime": MarketRegime.TREND_UP}
+        now = datetime.now(UTC)
+
+        assert self.strategy.should_exit(
+            {"symbol": "BTCUSDT", "close": Decimal("104"), "open_time": now},
+            indicators,
+            position,
+        ) is None
+        signal = self.strategy.should_exit(
+            {"symbol": "BTCUSDT", "close": Decimal("101.9"), "open_time": now},
+            indicators,
+            {**position, "unrealized_pnl_pct": Decimal("0.019")},
+        )
+        assert signal is not None
+        assert signal.reason == "Trailing stop hit"
 
 
 class TestDCAConfig:

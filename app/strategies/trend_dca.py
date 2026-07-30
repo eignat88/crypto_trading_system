@@ -1,9 +1,8 @@
-from decimal import Decimal
-from typing import Optional
 from dataclasses import dataclass
+from decimal import Decimal
 
+from app.indicators.market_regime import MarketRegime, MarketRegimeDetector
 from app.strategies.base_strategy import BaseStrategy, Signal
-from app.indicators.market_regime import MarketRegimeDetector, MarketRegime
 
 
 @dataclass
@@ -57,13 +56,14 @@ class TrendDCAStrategy(BaseStrategy):
         self.config = config or DCAConfig()
         self.regime_detector = MarketRegimeDetector()
         self.dca_levels: dict[str, int] = {}  # Track DCA level per symbol
+        self.trailing_highs: dict[str, Decimal] = {}
 
     def should_enter(
         self,
         candle: dict,
         indicators: dict,
         portfolio_state: dict,
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """Check entry conditions for Trend DCA."""
         symbol = candle.get("symbol")
         close = candle.get("close")
@@ -113,6 +113,7 @@ class TrendDCAStrategy(BaseStrategy):
 
         # Reset DCA level
         self.dca_levels[symbol] = 0
+        self.trailing_highs.pop(symbol, None)
 
         return Signal(
             action="open_long",
@@ -130,7 +131,7 @@ class TrendDCAStrategy(BaseStrategy):
         candle: dict,
         indicators: dict,
         position: dict,
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """Check exit conditions for Trend DCA."""
         symbol = candle.get("symbol")
         close = candle.get("close")
@@ -138,14 +139,11 @@ class TrendDCAStrategy(BaseStrategy):
 
         # Get position info
         entry_price = position.get("entry_price")
-        side = position.get("side")
         quantity = position.get("quantity")
         unrealized_pnl_pct = position.get("unrealized_pnl_pct", Decimal("0"))
 
         # Get indicators
         regime = indicators.get("regime")
-        ema_200 = indicators.get("ema_200")
-
         # Check holding period
         holding_periods = position.get("holding_periods", 0)
         if holding_periods >= self.config.max_holding_periods:
@@ -169,10 +167,16 @@ class TrendDCAStrategy(BaseStrategy):
                 reason="Regime changed to TREND_DOWN",
             )
 
-        # Check trailing stop
-        if unrealized_pnl_pct >= self.config.trailing_stop_activation:
-            trailing_stop = close * (Decimal("1") - self.config.trailing_stop_distance)
+        # Once activated, trail the highest observed close instead of the current
+        # close (which can never be below a percentage of itself).
+        activation_price = entry_price * (Decimal("1") + self.config.trailing_stop_activation)
+        trailing_high = self.trailing_highs.get(symbol)
+        if trailing_high is not None or close >= activation_price:
+            trailing_high = max(trailing_high or close, close)
+            self.trailing_highs[symbol] = trailing_high
+            trailing_stop = trailing_high * (Decimal("1") - self.config.trailing_stop_distance)
             if close <= trailing_stop:
+                self.trailing_highs.pop(symbol, None)
                 return Signal(
                     action="close",
                     symbol=symbol,
@@ -200,7 +204,7 @@ class TrendDCAStrategy(BaseStrategy):
         candle: dict,
         indicators: dict,
         position: dict,
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Check if we should add a DCA safety order.
 

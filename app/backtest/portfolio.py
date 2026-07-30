@@ -1,31 +1,30 @@
-from decimal import Decimal
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from decimal import Decimal
 
 
 @dataclass
 class Position:
     """Represents a trading position."""
     symbol: str
-    side: str  # 'long' or 'short'
+    side: str  # Spot portfolios only support 'long'.
     entry_price: Decimal
     quantity: Decimal
     entry_time: datetime
-    stop_loss: Optional[Decimal] = None
-    take_profit: Optional[Decimal] = None
-    trailing_stop: Optional[Decimal] = None
+    stop_loss: Decimal | None = None
+    take_profit: Decimal | None = None
+    trailing_stop: Decimal | None = None
     unrealized_pnl: Decimal = Decimal("0")
+    current_price: Decimal | None = None
+    entry_commission: Decimal = Decimal("0")
 
     @property
     def position_value(self) -> Decimal:
-        return self.entry_price * self.quantity
+        return (self.current_price or self.entry_price) * self.quantity
 
     def update_pnl(self, current_price: Decimal):
-        if self.side == "long":
-            self.unrealized_pnl = (current_price - self.entry_price) * self.quantity
-        else:
-            self.unrealized_pnl = (self.entry_price - current_price) * self.quantity
+        self.current_price = current_price
+        self.unrealized_pnl = (current_price - self.entry_price) * self.quantity
 
 
 class Portfolio:
@@ -38,13 +37,12 @@ class Portfolio:
         self.closed_positions: list[Position] = []
         self.trade_history: list[dict] = []
         self.equity_history: list[tuple[datetime, Decimal]] = []
+        self.max_drawdown = Decimal("0")
 
     @property
     def total_equity(self) -> Decimal:
         """Calculate total portfolio equity."""
-        positions_value = sum(
-            pos.unrealized_pnl for pos in self.positions.values()
-        )
+        positions_value = sum(pos.position_value for pos in self.positions.values())
         return self.balance + positions_value
 
     @property
@@ -66,8 +64,8 @@ class Portfolio:
         price: Decimal,
         quantity: Decimal,
         timestamp: datetime,
-        stop_loss: Optional[Decimal] = None,
-        take_profit: Optional[Decimal] = None,
+        stop_loss: Decimal | None = None,
+        take_profit: Decimal | None = None,
         commission: Decimal = Decimal("0"),
     ) -> bool:
         """
@@ -76,6 +74,9 @@ class Portfolio:
         Returns:
             True if position opened successfully
         """
+        if side != "long" or quantity <= 0:
+            return False
+
         cost = price * quantity + commission
 
         if cost > self.balance:
@@ -83,17 +84,32 @@ class Portfolio:
 
         self.balance -= cost
 
-        position = Position(
-            symbol=symbol,
-            side=side,
-            entry_price=price,
-            quantity=quantity,
-            entry_time=timestamp,
-            stop_loss=stop_loss,
-            take_profit=take_profit,
-        )
-
-        self.positions[symbol] = position
+        position = self.positions.get(symbol)
+        if position is None:
+            position = Position(
+                symbol=symbol,
+                side=side,
+                entry_price=price,
+                quantity=quantity,
+                entry_time=timestamp,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                current_price=price,
+                entry_commission=commission,
+            )
+            self.positions[symbol] = position
+        else:
+            # A repeated spot buy is a DCA fill, not a replacement position.
+            total_quantity = position.quantity + quantity
+            position.entry_price = (
+                position.entry_price * position.quantity + price * quantity
+            ) / total_quantity
+            position.quantity = total_quantity
+            position.entry_commission += commission
+            position.current_price = price
+            position.stop_loss = stop_loss if stop_loss is not None else position.stop_loss
+            position.take_profit = take_profit if take_profit is not None else position.take_profit
+            position.update_pnl(price)
 
         self.trade_history.append({
             "type": "open",
@@ -113,7 +129,7 @@ class Portfolio:
         price: Decimal,
         timestamp: datetime,
         commission: Decimal = Decimal("0"),
-    ) -> Optional[Decimal]:
+    ) -> Decimal | None:
         """
         Close an existing position.
 
@@ -125,16 +141,14 @@ class Portfolio:
 
         position = self.positions.pop(symbol)
 
-        # Calculate PnL
-        if position.side == "long":
-            pnl = (price - position.entry_price) * position.quantity
-        else:
-            pnl = (position.entry_price - price) * position.quantity
-
-        pnl -= commission
+        pnl = (
+            (price - position.entry_price) * position.quantity
+            - position.entry_commission
+            - commission
+        )
 
         # Update balance
-        proceeds = position.entry_price * position.quantity + pnl
+        proceeds = price * position.quantity - commission
         self.balance += proceeds
 
         # Record trade
@@ -186,19 +200,15 @@ class Portfolio:
             if position.stop_loss is not None:
                 if position.side == "long" and current_price <= position.stop_loss:
                     symbols_to_close.append(symbol)
-                elif position.side == "short" and current_price >= position.stop_loss:
-                    symbols_to_close.append(symbol)
 
             # Check take-profit
             if position.take_profit is not None:
                 if position.side == "long" and current_price >= position.take_profit:
                     symbols_to_close.append(symbol)
-                elif position.side == "short" and current_price <= position.take_profit:
-                    symbols_to_close.append(symbol)
 
         return symbols_to_close
 
-    def get_position(self, symbol: str) -> Optional[Position]:
+    def get_position(self, symbol: str) -> Position | None:
         """Get position for a symbol."""
         return self.positions.get(symbol)
 
