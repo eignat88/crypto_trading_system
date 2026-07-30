@@ -6,21 +6,21 @@ Usage:
     python scripts/load_history.py --symbol ETHUSDT --interval 1h --start 2021-01-01
 """
 
-import asyncio
 import argparse
-from datetime import datetime, timezone, timedelta
+import asyncio
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import structlog
 
 # Add project root to path
 sys_path = Path(__file__).parent.parent
-import sys
+import sys  # noqa: E402
+
 sys.path.insert(0, str(sys_path))
 
-from app.config.settings import settings
-from app.exchange.bybit_client import BybitClient
-from app.collectors.candle_collector import CandleCollector
+from app.collectors.candle_collector import CandleCollector, interval_duration  # noqa: E402
+from app.exchange.bybit_client import BybitClient  # noqa: E402
 
 # Configure logging
 structlog.configure(
@@ -87,13 +87,13 @@ async def main():
     args = parse_args()
 
     # Calculate date range
-    end_date = datetime.now(timezone.utc)
+    end_date = datetime.now(UTC)
     if args.end:
-        end_date = datetime.strptime(args.end, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end_date = datetime.strptime(args.end, "%Y-%m-%d").replace(tzinfo=UTC)
 
     start_date = end_date - timedelta(days=args.years * 365)
     if args.start:
-        start_date = datetime.strptime(args.start, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        start_date = datetime.strptime(args.start, "%Y-%m-%d").replace(tzinfo=UTC)
 
     logger.info(
         "loading_config",
@@ -121,7 +121,7 @@ async def main():
                 if args.resume:
                     checkpoint = await collector.get_last_checkpoint(symbol, interval)
                     if checkpoint:
-                        current_start = checkpoint + timedelta(seconds=1)
+                        current_start = checkpoint + interval_duration(interval)
                         logger.info(
                             "resuming_from_checkpoint",
                             symbol=symbol,
@@ -135,16 +135,6 @@ async def main():
                     interval=interval,
                     start_date=current_start,
                     end_date=end_date,
-                )
-
-                # Update checkpoint status
-                await collector.update_checkpoint_status(
-                    symbol=symbol,
-                    interval=interval,
-                    start_time=current_start,
-                    end_time=end_date,
-                    rows_loaded=total_loaded,
-                    status="success",
                 )
 
                 logger.info(

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any
 
 
 @dataclass
@@ -11,14 +11,34 @@ class Candle:
     symbol: str
     interval_code: str
     open_time: datetime
-    close_time: Optional[datetime]
+    close_time: datetime | None
     open_price: Decimal
     high_price: Decimal
     low_price: Decimal
     close_price: Decimal
     volume: Decimal
-    quote_volume: Optional[Decimal]
-    trade_count: Optional[int]
+    quote_volume: Decimal | None
+    trade_count: int | None
+    source_payload: Any | None = None
+
+
+class CandleBatch(list[Candle]):
+    """Candles together with the provenance of the API response."""
+
+    def __init__(
+        self,
+        candles: list[Candle],
+        *,
+        request_id: str | None = None,
+        request_time: datetime | None = None,
+        request_payload: dict[str, Any] | None = None,
+        response_payload: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(candles)
+        self.request_id = request_id
+        self.request_time = request_time
+        self.request_payload = request_payload
+        self.response_payload = response_payload
 
 
 @dataclass
@@ -60,7 +80,7 @@ class BaseExchange(ABC):
         ...
 
     @abstractmethod
-    async def get_open_orders(self, symbol: Optional[str] = None) -> list[dict]:
+    async def get_open_orders(self, symbol: str | None = None) -> list[dict]:
         """Get open orders."""
         ...
 
@@ -71,8 +91,8 @@ class BaseExchange(ABC):
         side: str,
         order_type: str,
         quantity: Decimal,
-        price: Optional[Decimal] = None,
-        client_order_id: Optional[str] = None,
+        price: Decimal | None = None,
+        client_order_id: str | None = None,
     ) -> dict:
         """Place a new order."""
         ...
@@ -85,8 +105,8 @@ class BaseExchange(ABC):
     @abstractmethod
     async def get_executions(
         self,
-        symbol: Optional[str] = None,
-        start_time: Optional[datetime] = None,
+        symbol: str | None = None,
+        start_time: datetime | None = None,
     ) -> list[dict]:
         """Get trade executions."""
         ...

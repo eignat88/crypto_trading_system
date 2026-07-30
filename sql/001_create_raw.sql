@@ -138,6 +138,7 @@ CREATE TABLE IF NOT EXISTS raw_system.api_responses
     id                  bigserial   PRIMARY KEY,
     exchange_name       text        NOT NULL,
     endpoint            text        NOT NULL,
+    request_id          text,
     request_time        timestamptz NOT NULL,
     response_time       timestamptz,
     status_code         integer,
