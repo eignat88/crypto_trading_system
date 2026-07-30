@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-from decimal import Decimal
-from typing import Optional
+
 import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +16,7 @@ class QualityCheckResult:
     passed: bool
     total_rows: int
     failed_rows: int
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 @dataclass
@@ -103,10 +102,6 @@ class DataQualityChecker:
             valid_candles = total - invalid_candles
             overall_passed = all(c.passed for c in checks)
 
-            # Mark invalid candles in database
-            if invalid_candles > 0:
-                await self._mark_invalid_candles(session, instrument_id, interval)
-
             # Generate report
             report = DataQualityReport(
                 symbol=symbol,
@@ -132,7 +127,7 @@ class DataQualityChecker:
 
     async def _get_instrument_id(
         self, session: AsyncSession, symbol: str
-    ) -> Optional[int]:
+    ) -> int | None:
         """Get instrument_id for a symbol."""
         result = await session.execute(
             text(
@@ -345,38 +340,3 @@ class DataQualityChecker:
             total_rows=total,
             failed_rows=failed,
         )
-
-    async def _mark_invalid_candles(
-        self, session: AsyncSession, instrument_id: int, interval: str
-    ):
-        """Mark candles that fail quality checks as invalid."""
-        await session.execute(
-            text(
-                """
-                UPDATE dds.candle
-                SET is_valid = false,
-                    validation_errors = jsonb_build_object(
-                        'high_gte_open', high_price < open_price,
-                        'high_gte_close', high_price < close_price,
-                        'low_lte_open', low_price > open_price,
-                        'low_lte_close', low_price > close_price,
-                        'high_gte_low', high_price < low_price,
-                        'volume_gte_zero', volume < 0,
-                        'close_gt_zero', close_price <= 0
-                    )
-                WHERE instrument_id = :instrument_id
-                  AND interval_code = :interval
-                  AND (
-                      high_price < open_price
-                      OR high_price < close_price
-                      OR low_price > open_price
-                      OR low_price > close_price
-                      OR high_price < low_price
-                      OR volume < 0
-                      OR close_price <= 0
-                  )
-                """
-            ),
-            {"instrument_id": instrument_id, "interval": interval},
-        )
-        await session.commit()

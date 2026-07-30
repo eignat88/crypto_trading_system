@@ -42,6 +42,9 @@ python -m app.main
 
 # Загрузить исторические данные
 python scripts/load_history.py --symbol BTCUSDT --interval 1d --years 3
+
+# После применения sql/005_raw_to_dds_etl.sql перенести закрытые свечи RAW в DDS
+python scripts/load_dds.py
 ```
 
 ## Структура проекта
