@@ -1,0 +1,15 @@
+﻿{
+    "started_at_local":  "2026-07-30T18:27:35.4985888+03:00",
+    "computer_name":  "DESKTOP-7QJ65L5",
+    "server":  "localhost",
+    "port":  5432,
+    "database":  "crypto_trading",
+    "database_user":  "postgres",
+    "psql_path":  "C:\\Program Files\\PostgreSQL\\17\\bin\\psql.exe",
+    "sql_file":  "D:\\py_pro\\crypto_trading_system\\monitoring\\postgres_full_diagnostic.sql",
+    "report_file":  "D:\\py_pro\\crypto_trading_system\\monitoring\\diagnostic_reports\\postgres_diagnostic_crypto_trading_20260730_182735.txt",
+    "status":  "SUCCESS",
+    "ended_at_local":  "2026-07-30T18:27:43.0227061+03:00",
+    "duration_seconds":  7.47,
+    "exit_code":  0
+}
