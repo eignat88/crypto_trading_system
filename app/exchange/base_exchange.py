@@ -80,7 +80,7 @@ class BaseExchange(ABC):
         ...
 
     @abstractmethod
-    async def get_open_orders(self, symbol: str | None = None) -> list[dict]:
+    async def get_open_orders(self, symbol: str | None = None) -> list[dict[str, Any]]:
         """Get open orders."""
         ...
 
@@ -91,14 +91,14 @@ class BaseExchange(ABC):
         side: str,
         order_type: str,
         quantity: Decimal,
+        client_order_id: str,
         price: Decimal | None = None,
-        client_order_id: str | None = None,
-    ) -> dict:
+    ) -> dict[str, Any]:
         """Place a new order."""
         ...
 
     @abstractmethod
-    async def cancel_order(self, order_id: str) -> dict:
+    async def cancel_order(self, order_id: str) -> dict[str, Any]:
         """Cancel an order."""
         ...
 
@@ -107,7 +107,7 @@ class BaseExchange(ABC):
         self,
         symbol: str | None = None,
         start_time: datetime | None = None,
-    ) -> list[dict]:
+    ) -> list[dict[str, Any]]:
         """Get trade executions."""
         ...
 
