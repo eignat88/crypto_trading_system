@@ -87,10 +87,13 @@ class TestATR:
 
 class TestVolatility:
     def test_historical_volatility(self):
-        # Create some price data with volatility
+        # Create some price data with volatility (alternating up/down)
         closes = [Decimal("100")]
         for i in range(1, 30):
-            closes.append(closes[-1] * Decimal("1.01"))
+            if i % 2 == 0:
+                closes.append(closes[-1] * Decimal("1.05"))  # 5% up
+            else:
+                closes.append(closes[-1] * Decimal("0.95"))  # 5% down
         result = calculate_historical_volatility(closes, 20)
         assert result is not None
         assert result > 0
