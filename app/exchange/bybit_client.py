@@ -1,16 +1,15 @@
-import time
-import hmac
 import hashlib
-from datetime import datetime, timezone
+import hmac
+import time
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
 import structlog
 
-from app.exchange.base_exchange import BaseExchange, Candle, Instrument
 from app.config.settings import settings
+from app.exchange.base_exchange import BaseExchange, Candle, CandleBatch, Instrument
 
 logger = structlog.get_logger()
 
@@ -39,13 +38,13 @@ class BybitClient(BaseExchange):
         )
 
     def _generate_signature(
-        self, timestamp: int, params: Optional[dict] = None, body: str = ""
+        self, timestamp: int, params: dict | None = None, body: str = ""
     ) -> str:
         """Generate HMAC signature for authenticated requests."""
         param_str = ""
         if params:
             param_str = urlencode(sorted(params.items()))
-        
+
         sign_str = f"{timestamp}{self.api_key}{param_str}{body}"
         return hmac.new(
             self.api_secret.encode(), sign_str.encode(), hashlib.sha256
@@ -63,7 +62,7 @@ class BybitClient(BaseExchange):
         self,
         method: str,
         path: str,
-        params: Optional[dict] = None,
+        params: dict | None = None,
         authenticated: bool = False,
     ) -> dict:
         """Make API request with retry logic."""
@@ -71,7 +70,7 @@ class BybitClient(BaseExchange):
             try:
                 timestamp = int(time.time() * 1000)
                 headers = {}
-                
+
                 if authenticated:
                     sign = self._generate_signature(timestamp, params)
                     headers = self._get_headers(timestamp, sign)
@@ -81,7 +80,7 @@ class BybitClient(BaseExchange):
                 )
                 response.raise_for_status()
                 data = response.json()
-                
+
                 if data.get("retCode") != 0:
                     logger.warning(
                         "bybit_api_error",
@@ -90,9 +89,9 @@ class BybitClient(BaseExchange):
                         path=path,
                     )
                     raise ValueError(f"Bybit API error: {data.get('retMsg')}")
-                
+
                 return data.get("result", {})
-                
+
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:  # Rate limit
                     wait_time = min(2 ** attempt * 1000, 10000)
@@ -112,7 +111,7 @@ class BybitClient(BaseExchange):
     async def get_instruments(self) -> list[Instrument]:
         """Get list of available instruments."""
         result = await self._request("GET", "/v5/market/instruments-info", {"category": "spot"})
-        
+
         instruments = []
         for item in result.get("list", []):
             instruments.append(
@@ -135,7 +134,7 @@ class BybitClient(BaseExchange):
     ) -> list[Candle]:
         """Get historical candles."""
         interval_code = self.INTERVAL_MAP.get(interval, interval)
-        
+
         params = {
             "category": "spot",
             "symbol": symbol,
@@ -144,14 +143,20 @@ class BybitClient(BaseExchange):
             "end": int(end_time.timestamp() * 1000),
             "limit": min(limit, 1000),
         }
-        
-        result = await self._request("GET", "/v5/market/kline", params)
-        
+
+        request_time = datetime.now(UTC)
+        response = await self.client.get("/v5/market/kline", params=params)
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("retCode") != 0:
+            raise ValueError(f"Bybit API error: {payload.get('retMsg')}")
+        result = payload.get("result", {})
+
         candles = []
         for item in result.get("list", []):
             # Bybit returns: [startTime, open, high, low, close, volume, turnover]
-            open_time = datetime.fromtimestamp(int(item[0]) / 1000, tz=timezone.utc)
-            
+            open_time = datetime.fromtimestamp(int(item[0]) / 1000, tz=UTC)
+
             candles.append(
                 Candle(
                     exchange_name="bybit",
@@ -166,21 +171,30 @@ class BybitClient(BaseExchange):
                     volume=Decimal(item[5]),
                     quote_volume=Decimal(item[6]) if item[6] else None,
                     trade_count=None,
+                    source_payload=item,
                 )
             )
-        
-        return candles
+
+        candles.sort(key=lambda candle: candle.open_time)
+        request_id = response.headers.get("Traceid") or response.headers.get("X-Request-Id")
+        return CandleBatch(
+            candles,
+            request_id=request_id,
+            request_time=request_time,
+            request_payload=params,
+            response_payload=payload,
+        )
 
     async def get_current_price(self, symbol: str) -> Decimal:
         """Get current price for a symbol."""
         result = await self._request(
             "GET", "/v5/market/tickers", {"category": "spot", "symbol": symbol}
         )
-        
+
         tickers = result.get("list", [])
         if not tickers:
             raise ValueError(f"No ticker found for {symbol}")
-        
+
         return Decimal(tickers[0]["lastPrice"])
 
     async def get_balance(self) -> dict[str, Decimal]:
@@ -188,19 +202,19 @@ class BybitClient(BaseExchange):
         result = await self._request(
             "GET", "/v5/account/wallet-balance", {"accountType": "UNIFIED"}, authenticated=True
         )
-        
+
         balances = {}
         for coin in result.get("list", [{}])[0].get("coin", []):
             balances[coin["coin"]] = Decimal(coin["walletBalance"])
-        
+
         return balances
 
-    async def get_open_orders(self, symbol: Optional[str] = None) -> list[dict]:
+    async def get_open_orders(self, symbol: str | None = None) -> list[dict]:
         """Get open orders."""
         params = {"category": "spot", "orderStatus": "New"}
         if symbol:
             params["symbol"] = symbol
-        
+
         result = await self._request("GET", "/v5/order/realtime", params, authenticated=True)
         return result.get("list", [])
 
@@ -210,8 +224,8 @@ class BybitClient(BaseExchange):
         side: str,
         order_type: str,
         quantity: Decimal,
-        price: Optional[Decimal] = None,
-        client_order_id: Optional[str] = None,
+        price: Decimal | None = None,
+        client_order_id: str | None = None,
     ) -> dict:
         """Place a new order."""
         params = {
@@ -221,13 +235,13 @@ class BybitClient(BaseExchange):
             "orderType": order_type,
             "qty": str(quantity),
         }
-        
+
         if price is not None:
             params["price"] = str(price)
-        
+
         if client_order_id:
             params["orderLinkId"] = client_order_id
-        
+
         return await self._request("POST", "/v5/order/create", params, authenticated=True)
 
     async def cancel_order(self, order_id: str) -> dict:
@@ -240,8 +254,8 @@ class BybitClient(BaseExchange):
 
     async def get_executions(
         self,
-        symbol: Optional[str] = None,
-        start_time: Optional[datetime] = None,
+        symbol: str | None = None,
+        start_time: datetime | None = None,
     ) -> list[dict]:
         """Get trade executions."""
         params = {"category": "spot"}
@@ -249,7 +263,7 @@ class BybitClient(BaseExchange):
             params["symbol"] = symbol
         if start_time:
             params["startTime"] = int(start_time.timestamp() * 1000)
-        
+
         result = await self._request("GET", "/v5/execution/list", params, authenticated=True)
         return result.get("list", [])
 
