@@ -32,6 +32,7 @@ class BybitClient(BaseExchange):
     MAX_GET_ATTEMPTS = 3
     AUTH_ERROR_CODES = {10003, 10004, 10005, 10007, 10010}
     RATE_LIMIT_CODES = {10006, 10429}
+    SERVER_ERROR_CODES = {10000, 10016}
     INTERVAL_MAP = {"5m": "5", "15m": "15", "1h": "60", "4h": "240", "1d": "D"}
 
     def __init__(self) -> None:
@@ -69,7 +70,9 @@ class BybitClient(BaseExchange):
     def _json_body(body: dict[str, Any]) -> str:
         return json.dumps(body, separators=(",", ":"), ensure_ascii=False)
 
-    def _raise_api_error(self, data: dict[str, Any], path: str) -> None:
+    def _raise_api_error(
+        self, data: dict[str, Any], path: str, *, server_errors_are_indeterminate: bool = False
+    ) -> None:
         code = data.get("retCode")
         if code == 0:
             return
@@ -79,6 +82,8 @@ class BybitClient(BaseExchange):
             raise ExchangeAuthError(message)
         if code in self.RATE_LIMIT_CODES:
             raise ExchangeRateLimitError(message)
+        if server_errors_are_indeterminate and code in self.SERVER_ERROR_CODES:
+            raise ExchangeTimeoutError(message)
         raise ExchangeAPIRejectError(message, code=code if isinstance(code, int) else None)
 
     async def _get_raw(
@@ -146,7 +151,7 @@ class BybitClient(BaseExchange):
                 data = response.json()
             except json.JSONDecodeError as exc:
                 raise ExchangeTimeoutError("Bybit returned an indeterminate response") from exc
-            self._raise_api_error(data, path)
+            self._raise_api_error(data, path, server_errors_are_indeterminate=True)
             return cast(dict[str, Any], data.get("result", {}))
         except (
             ExchangeAuthError,
@@ -155,7 +160,7 @@ class BybitClient(BaseExchange):
             ExchangeTimeoutError,
         ):
             raise
-        except (httpx.TimeoutException, httpx.NetworkError) as exc:
+        except httpx.TransportError as exc:
             raise ExchangeTimeoutError(str(exc)) from exc
         except httpx.HTTPStatusError as exc:
             raise ExchangeAPIRejectError(str(exc)) from exc
