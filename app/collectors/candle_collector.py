@@ -28,6 +28,13 @@ def interval_duration(interval: str) -> timedelta:
         raise ValueError(f"Unsupported candle interval: {interval}") from exc
 
 
+def align_to_interval(value: datetime, duration: timedelta) -> datetime:
+    """Floor a timestamp to an exchange candle boundary."""
+    duration_seconds = int(duration.total_seconds())
+    aligned_seconds = int(value.timestamp()) // duration_seconds * duration_seconds
+    return datetime.fromtimestamp(aligned_seconds, tz=value.tzinfo)
+
+
 class CandleCollector:
     """Collects and stores historical candle data."""
 
@@ -43,10 +50,12 @@ class CandleCollector:
         batch_size: int = 1000,
     ) -> int:
         """Load historical candles with checkpoint support."""
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive")
         total_loaded = 0
-        current_start = start_date
         duration = interval_duration(interval)
-        previous_open_time: datetime | None = None
+        current_start = align_to_interval(start_date, duration)
+        page_size = min(batch_size, 1000)
 
         logger.info(
             "loading_started",
@@ -57,17 +66,30 @@ class CandleCollector:
         )
 
         while current_start < end_date:
+            # Bybit orders klines newest-first. A bounded inclusive window ensures
+            # that a full response cannot omit candles at the start of the page.
+            batch_end = min(
+                end_date,
+                current_start + duration * (page_size - 1),
+            )
             # Load batch
             candles = await self.exchange.get_candles(
                 symbol=symbol,
                 interval=interval,
                 start_time=current_start,
-                end_time=end_date,
-                limit=batch_size,
+                end_time=batch_end,
+                limit=page_size,
             )
 
             if not candles:
-                break
+                raise ValueError(
+                    f"Empty candle batch for expected range {current_start.isoformat()} "
+                    f"to {batch_end.isoformat()}"
+                )
+
+            candles.sort(key=lambda candle: candle.open_time)
+            self._validate_batch(candles, duration, current_start)
+            max_open_time = max(candle.open_time for candle in candles)
 
             candles.sort(key=lambda candle: candle.open_time)
             self._validate_batch(candles, duration, previous_open_time)
@@ -94,7 +116,6 @@ class CandleCollector:
             )
 
             # Move to next batch (start after last candle)
-            previous_open_time = max_open_time
             current_start = max_open_time + duration
 
             # Rate limiting
@@ -166,7 +187,7 @@ class CandleCollector:
 
     @staticmethod
     def _validate_batch(
-        candles: list[Candle], duration: timedelta, previous: datetime | None
+        candles: list[Candle], duration: timedelta, expected_start: datetime
     ) -> None:
         times = [candle.open_time for candle in candles]
         if len(times) != len(set(times)):
@@ -176,8 +197,10 @@ class CandleCollector:
         expected_pairs = zip(times, times[1:])
         if any(later - earlier != duration for earlier, later in expected_pairs):
             raise ValueError("Gap detected in Bybit candle response")
-        if previous is not None and times[0] != previous + duration:
-            raise ValueError("Gap detected between Bybit candle batches")
+        if times[0] != expected_start:
+            raise ValueError(
+                f"Batch starts at {times[0].isoformat()}, expected {expected_start.isoformat()}"
+            )
 
     async def _store_api_response(self, session: AsyncSession, candles: list[Candle]) -> None:
         response_payload = getattr(candles, "response_payload", None)
@@ -233,22 +256,18 @@ class CandleCollector:
             },
         )
 
-    async def get_last_checkpoint(
-        self, symbol: str, interval: str
-    ) -> datetime | None:
+    async def get_last_checkpoint(self, symbol: str, interval: str) -> datetime | None:
         """Get last successful checkpoint for resume."""
         async with async_session_factory() as session:
             result = await session.execute(
                 text(
                     """
-                    SELECT end_time
+                    SELECT max(end_time)
                     FROM raw_system.loading_journal
                     WHERE exchange_name = 'bybit'
                       AND symbol = :symbol
                       AND interval_code = :interval
                       AND status = 'success'
-                    ORDER BY completed_at DESC
-                    LIMIT 1
                     """
                 ),
                 {"symbol": symbol, "interval": interval},

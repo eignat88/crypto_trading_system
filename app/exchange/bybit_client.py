@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import hmac
 import time
@@ -46,9 +47,7 @@ class BybitClient(BaseExchange):
             param_str = urlencode(sorted(params.items()))
 
         sign_str = f"{timestamp}{self.api_key}{param_str}{body}"
-        return hmac.new(
-            self.api_secret.encode(), sign_str.encode(), hashlib.sha256
-        ).hexdigest()
+        return hmac.new(self.api_secret.encode(), sign_str.encode(), hashlib.sha256).hexdigest()
 
     def _get_headers(self, timestamp: int, sign: str) -> dict:
         return {
@@ -66,8 +65,20 @@ class BybitClient(BaseExchange):
         authenticated: bool = False,
     ) -> dict:
         """Make API request with retry logic."""
+        _, data, _ = await self._request_raw(method, path, params, authenticated)
+        return data.get("result", {})
+
+    async def _request_raw(
+        self,
+        method: str,
+        path: str,
+        params: dict | None = None,
+        authenticated: bool = False,
+    ) -> tuple[httpx.Response, dict, datetime]:
+        """Return the complete response and request time while retaining retries."""
         for attempt in range(3):
             try:
+                request_time = datetime.now(UTC)
                 timestamp = int(time.time() * 1000)
                 headers = {}
 
@@ -75,9 +86,7 @@ class BybitClient(BaseExchange):
                     sign = self._generate_signature(timestamp, params)
                     headers = self._get_headers(timestamp, sign)
 
-                response = await self.client.request(
-                    method, path, params=params, headers=headers
-                )
+                response = await self.client.request(method, path, params=params, headers=headers)
                 response.raise_for_status()
                 data = response.json()
 
@@ -90,13 +99,12 @@ class BybitClient(BaseExchange):
                     )
                     raise ValueError(f"Bybit API error: {data.get('retMsg')}")
 
-                return data.get("result", {})
+                return response, data, request_time
 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 429:  # Rate limit
-                    wait_time = min(2 ** attempt * 1000, 10000)
+                    wait_time = min(2**attempt * 1000, 10000)
                     logger.warning("rate_limit_hit", wait_ms=wait_time)
-                    import asyncio
                     await asyncio.sleep(wait_time / 1000)
                     continue
                 raise
@@ -104,9 +112,10 @@ class BybitClient(BaseExchange):
                 if attempt == 2:
                     raise
                 logger.warning("request_retry", attempt=attempt + 1, error=str(e))
-                import asyncio
                 await asyncio.sleep(1)
                 continue
+
+        raise RuntimeError("Bybit request retry loop exited unexpectedly")
 
     async def get_instruments(self) -> list[Instrument]:
         """Get list of available instruments."""
@@ -144,12 +153,7 @@ class BybitClient(BaseExchange):
             "limit": min(limit, 1000),
         }
 
-        request_time = datetime.now(UTC)
-        response = await self.client.get("/v5/market/kline", params=params)
-        response.raise_for_status()
-        payload = response.json()
-        if payload.get("retCode") != 0:
-            raise ValueError(f"Bybit API error: {payload.get('retMsg')}")
+        response, payload, request_time = await self._request_raw("GET", "/v5/market/kline", params)
         result = payload.get("result", {})
 
         candles = []

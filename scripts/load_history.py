@@ -19,7 +19,11 @@ import sys  # noqa: E402
 
 sys.path.insert(0, str(sys_path))
 
-from app.collectors.candle_collector import CandleCollector, interval_duration  # noqa: E402
+from app.collectors.candle_collector import (  # noqa: E402
+    CandleCollector,
+    align_to_interval,
+    interval_duration,
+)
 from app.exchange.bybit_client import BybitClient  # noqa: E402
 
 # Configure logging
@@ -117,11 +121,12 @@ async def main():
                 )
 
                 # Check for resume point
-                current_start = start_date
+                duration = interval_duration(interval)
+                current_start = align_to_interval(start_date, duration)
                 if args.resume:
                     checkpoint = await collector.get_last_checkpoint(symbol, interval)
                     if checkpoint:
-                        current_start = checkpoint + interval_duration(interval)
+                        current_start = checkpoint + duration
                         logger.info(
                             "resuming_from_checkpoint",
                             symbol=symbol,
