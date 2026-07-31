@@ -1,7 +1,6 @@
-import pytest
 from decimal import Decimal
 
-from app.indicators.market_regime import MarketRegimeDetector, MarketRegime
+from app.indicators.market_regime import MarketRegime, MarketRegimeDetector
 
 
 class TestMarketRegimeDetector:
@@ -16,10 +15,10 @@ class TestMarketRegimeDetector:
         closes = [Decimal("100")]
         for i in range(1, 300):
             closes.append(closes[-1] * Decimal("1.003"))  # 0.3% per candle
-        
+
         highs = [c * Decimal("1.005") for c in closes]
         lows = [c * Decimal("0.995") for c in closes]
-        
+
         result = self.detector.detect(closes, highs, lows)
         # Debug: print result to see what's happening
         # assert result.regime == MarketRegime.TREND_UP
@@ -31,10 +30,10 @@ class TestMarketRegimeDetector:
         closes = [Decimal("200")]
         for i in range(1, 300):
             closes.append(closes[-1] * Decimal("0.997"))  # -0.3% per candle
-        
+
         highs = [c * Decimal("1.005") for c in closes]
         lows = [c * Decimal("0.995") for c in closes]
-        
+
         result = self.detector.detect(closes, highs, lows)
         # Debug: print result to see what's happening
         # assert result.regime == MarketRegime.TREND_DOWN
@@ -47,10 +46,10 @@ class TestMarketRegimeDetector:
         for i in range(300):
             # Small oscillation around 100
             closes.append(Decimal("100") + Decimal(str(2 * (i % 20 - 10))) / Decimal("10"))
-        
+
         highs = [c * Decimal("1.002") for c in closes]
         lows = [c * Decimal("0.998") for c in closes]
-        
+
         result = self.detector.detect(closes, highs, lows)
         assert result.regime == MarketRegime.RANGE
 
@@ -62,10 +61,10 @@ class TestMarketRegimeDetector:
                 closes.append(closes[-1] * Decimal("1.15"))  # 15% up
             else:
                 closes.append(closes[-1] * Decimal("0.85"))  # 15% down
-        
+
         highs = [c * Decimal("1.05") for c in closes]
         lows = [c * Decimal("0.95") for c in closes]
-        
+
         result = self.detector.detect(closes, highs, lows)
         assert result.regime == MarketRegime.HIGH_VOLATILITY
 
@@ -73,7 +72,7 @@ class TestMarketRegimeDetector:
         closes = [Decimal("100"), Decimal("101"), Decimal("102")]
         highs = [Decimal("101"), Decimal("102"), Decimal("103")]
         lows = [Decimal("99"), Decimal("100"), Decimal("101")]
-        
+
         result = self.detector.detect(closes, highs, lows)
         assert result.regime == MarketRegime.RANGE
         assert result.confidence < Decimal("0.5")

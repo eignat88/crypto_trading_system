@@ -1,12 +1,11 @@
 from decimal import Decimal
-from typing import Optional
 
 
 def calculate_ema(
     prices: list[Decimal],
     period: int,
-    previous_ema: Optional[Decimal] = None,
-) -> Optional[Decimal]:
+    previous_ema: Decimal | None = None,
+) -> Decimal | None:
     """
     Calculate Exponential Moving Average (EMA).
 
@@ -37,7 +36,7 @@ def calculate_ema(
 def calculate_ema_series(
     prices: list[Decimal],
     period: int,
-) -> list[Optional[Decimal]]:
+) -> list[Decimal | None]:
     """
     Calculate EMA series for all prices.
 
@@ -51,7 +50,7 @@ def calculate_ema_series(
     if len(prices) < period:
         return [None] * len(prices)
 
-    ema_values: list[Optional[Decimal]] = [None] * (period - 1)
+    ema_values: list[Decimal | None] = [None] * (period - 1)
 
     # Calculate initial SMA
     sma = sum(prices[:period]) / Decimal(period)
@@ -69,9 +68,9 @@ def calculate_ema_series(
 
 
 def calculate_ema_slope(
-    ema_values: list[Optional[Decimal]],
+    ema_values: list[Decimal | None],
     lookback: int = 5,
-) -> Optional[Decimal]:
+) -> Decimal | None:
     """
     Calculate EMA slope (rate of change).
 

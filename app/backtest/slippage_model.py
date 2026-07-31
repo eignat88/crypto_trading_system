@@ -1,6 +1,6 @@
-from decimal import Decimal
-from dataclasses import dataclass
 import random
+from dataclasses import dataclass
+from decimal import Decimal
 
 
 @dataclass
@@ -8,11 +8,11 @@ class SlippageConfig:
     """Slippage configuration."""
     # Fixed slippage as percentage of price
     fixed_slippage: Decimal = Decimal("0.0005")  # 0.05%
-    
+
     # Random slippage range (min, max) as percentage
     random_slippage_min: Decimal = Decimal("0")
     random_slippage_max: Decimal = Decimal("0.001")  # 0.1%
-    
+
     # Volume-based slippage (additional slippage for large orders)
     volume_impact_threshold: Decimal = Decimal("0.01")  # 1% of average volume
     volume_impact_factor: Decimal = Decimal("0.1")  # 10% additional slippage per threshold
