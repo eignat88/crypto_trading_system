@@ -90,6 +90,24 @@ Bybit API
 | Автозапуск индикаторов после DDS | — | Не реализовано |
 | DDS → MART | — | Не реализовано |
 
+### Повторная проверка реализации после PR №15
+
+| Требование плана | Фактическое подтверждение | Статус |
+|---|---|---|
+| `close_time` для пяти интервалов | `app/exchange/intervals.py`, `BybitClient.get_candles()`, unit-тесты | Выполнено |
+| Правая граница `[start, end)` | фильтрация в `CandleCollector`, тест `test_candles_at_or_after_end_are_not_saved` | Выполнено, PR №15 слит |
+| RAW, API response и checkpoint в одной транзакции | `session.begin()` охватывает три операции | Выполнено в коде |
+| Идемпотентный RAW → DDS | `dds.load_raw_candles()`, checkpoint `FOR UPDATE`, `ON CONFLICT DO NOTHING` | Выполнено в SQL |
+| Карантин и журнал DDS | `dds.data_quality_event`, `dds.etl_run` | Выполнено в SQL |
+| Чистое и повторное применение миграций | `scripts/apply_migrations.py`, PostgreSQL integration test | Подготовлено, требуется CI |
+| Валидная, отклонённая и отложенная свеча | `tests/integration/test_postgresql_pipeline.py` | Подготовлено, требуется CI |
+| Автоматическая сверка диапазона RAW/DDS | `scripts/verify_market_data.py` | Подготовлено, требуется запуск на целевой БД |
+| Регламент пилота | `plan/postgresql_pilot_runbook.md` | Подготовлено |
+
+**Промежуточный вывод:** кодовые блокеры исторической загрузки устранены. Массовая
+загрузка всё ещё запрещена до прохождения PostgreSQL 17 integration в CI и пилота
+`BTCUSDT 1h` на целевой БД.
+
 ### Исправление блокера `close_time`
 
 `BybitClient.get_candles()` вычисляет `close_time` как `open_time + interval_duration`.
@@ -331,7 +349,8 @@ close_time = open_time + interval_duration
 - [x] unit-тесты проходят в локальной среде;
 - [ ] пилотная загрузка создаёт строки в `dds.candle` на PostgreSQL 17;
 - [ ] `deferred_count` содержит только действительно незакрытые свечи;
-- [ ] проверки проходят в CI.
+- [x] unit-тесты `close_time` и правой границы проходят в CI;
+- [ ] новый PostgreSQL 17 integration job проходит в CI.
 
 ## Этап 4. Пилотная загрузка в RAW
 
@@ -745,7 +764,8 @@ ORDER BY symbol, open_time;
 - [ ] невалидные строки изолируются в `dds.data_quality_event`;
 - [ ] незакрытые свечи не попадают в DDS;
 - [ ] количества RAW и DDS сверены;
-- [ ] есть интеграционные тесты с PostgreSQL;
+- [x] интеграционные тесты с PostgreSQL подготовлены;
+- [ ] интеграционные тесты подтверждены новым CI job;
 - [ ] ошибки API и БД журналируются;
 - [ ] все timestamps хранятся в UTC;
 - [ ] торговые модули не используют неполные или невалидные данные;
@@ -756,12 +776,12 @@ ORDER BY symbol, open_time;
 
 ## 13. Рекомендуемый порядок ближайших работ
 
-1. Поднять тестовую PostgreSQL и применить миграции `001–006`.
-2. Выполнить пилот `BTCUSDT / 1h / 7 дней`.
-3. Проверить RAW, API-журнал и checkpoint.
-4. Выполнить `RAW → DDS` и проверить `inserted/rejected/deferred`.
-5. Повторить оба запуска и подтвердить идемпотентность.
-6. Добавить интеграционные тесты PostgreSQL в CI.
+1. Проверить новый PostgreSQL 17 integration job в GitHub Actions.
+2. На целевой БД дважды применить миграции `001–006` через `apply_migrations.py`.
+3. Выполнить пилот `BTCUSDT / 1h / 7 дней` по `postgresql_pilot_runbook.md`.
+4. Проверить RAW автоматической командой `verify_market_data.py --layer raw`.
+5. Выполнить `RAW → DDS`, повторить запуск и проверить идемпотентность.
+6. Выполнить итоговую автоматическую сверку `verify_market_data.py --layer all`.
 7. Загрузить 3 года истории по потокам от `1d` к `5m`.
 8. Выполнить итоговую проверку полноты и качества.
 9. Подключить автоматический расчёт индикаторов после успешного DDS ETL.
