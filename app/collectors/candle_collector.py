@@ -66,6 +66,12 @@ class CandleCollector:
                 limit=page_size,
             )
 
+            # The requested history range is half-open: [start_date, end_date).
+            # Some exchange endpoints treat ``end_time`` as inclusive, so keep
+            # the original CandleBatch object (and its response metadata) while
+            # removing candles on or beyond the requested right boundary.
+            candles[:] = [candle for candle in candles if candle.open_time < end_date]
+
             if not candles:
                 raise ValueError(
                     f"Empty candle batch for expected range {current_start.isoformat()} "
