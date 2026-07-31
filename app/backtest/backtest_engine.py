@@ -196,6 +196,7 @@ class BacktestEngine:
             current_balance=self.portfolio.balance,
             current_positions=current_positions,
             total_capital=self.portfolio.total_equity,
+            stop_loss_price=stop_loss,
         )
         if not risk_result.approved:
             only_position_size_exceeded = (

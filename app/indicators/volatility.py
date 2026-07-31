@@ -1,13 +1,12 @@
 import math
 from decimal import Decimal
-from typing import Optional
 
 
 def calculate_historical_volatility(
     closes: list[Decimal],
     period: int = 20,
     annualize: bool = True,
-) -> Optional[Decimal]:
+) -> Decimal | None:
     """
     Calculate Historical Volatility.
 
@@ -75,7 +74,7 @@ def calculate_bollinger_bands(
     closes: list[Decimal],
     period: int = 20,
     std_dev_multiplier: Decimal = Decimal("2"),
-) -> Optional[tuple[Decimal, Decimal, Decimal]]:
+) -> tuple[Decimal, Decimal, Decimal] | None:
     """
     Calculate Bollinger Bands.
 
@@ -111,7 +110,7 @@ def calculate_keltner_channels(
     ema_period: int = 20,
     atr_period: int = 10,
     atr_multiplier: Decimal = Decimal("1.5"),
-) -> Optional[tuple[Decimal, Decimal, Decimal]]:
+) -> tuple[Decimal, Decimal, Decimal] | None:
     """
     Calculate Keltner Channels.
 

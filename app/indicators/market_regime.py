@@ -1,14 +1,13 @@
-from decimal import Decimal
-from enum import Enum
 from dataclasses import dataclass
-from typing import Optional
+from decimal import Decimal
+from enum import StrEnum
 
-from app.indicators.ema import calculate_ema, calculate_ema_slope
 from app.indicators.atr import calculate_atr, calculate_atr_percentage
+from app.indicators.ema import calculate_ema, calculate_ema_slope
 from app.indicators.volatility import calculate_historical_volatility, calculate_volatility_regime
 
 
-class MarketRegime(str, Enum):
+class MarketRegime(StrEnum):
     TREND_UP = "TREND_UP"
     TREND_DOWN = "TREND_DOWN"
     RANGE = "RANGE"
@@ -20,11 +19,11 @@ class RegimeResult:
     regime: MarketRegime
     confidence: Decimal
     reasons: list[str]
-    ema_20: Optional[Decimal] = None
-    ema_50: Optional[Decimal] = None
-    ema_200: Optional[Decimal] = None
-    atr_percentage: Optional[Decimal] = None
-    volatility: Optional[Decimal] = None
+    ema_20: Decimal | None = None
+    ema_50: Decimal | None = None
+    ema_200: Decimal | None = None
+    atr_percentage: Decimal | None = None
+    volatility: Decimal | None = None
 
 
 class MarketRegimeDetector:
@@ -212,7 +211,7 @@ class MarketRegimeDetector:
 def calculate_ema_series(
     prices: list[Decimal],
     period: int,
-) -> list[Optional[Decimal]]:
+) -> list[Decimal | None]:
     """Calculate EMA series (helper function)."""
     from app.indicators.ema import calculate_ema_series as _calculate_ema_series
     return _calculate_ema_series(prices, period)

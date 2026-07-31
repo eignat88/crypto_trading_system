@@ -7,8 +7,11 @@
 | Структура проекта | ✅ Готово | `pyproject.toml`, `.env.example` |
 | Конфигурация | ✅ Готово | `app/config/settings.py` |
 | PostgreSQL RAW слой | ✅ Готово | `sql/001_create_raw.sql` |
+| PostgreSQL DDS слой и RAW → DDS ETL | ✅ Готово | `sql/002_create_dds.sql`, `sql/005_raw_to_dds_etl.sql`, `scripts/load_dds.py` |
+| PostgreSQL MART схема | 🚧 Частично | `sql/003_create_mart.sql` |
 | Bybit клиент | ✅ Готово | `app/exchange/bybit_client.py` |
 | Сборщик свечей | ✅ Готово | `app/collectors/candle_collector.py` |
+| Сборщик индикаторов | 🚧 Частично | `app/collectors/indicator_collector.py` |
 | Индикаторы (EMA, RSI, ATR) | ✅ Готово | `app/indicators/` |
 | Режим рынка | ✅ Готово | `app/indicators/market_regime.py` |
 | Backtest Engine | ✅ Готово | `app/backtest/` |
@@ -21,34 +24,34 @@
 ## Фаза 1: Инфраструктура данных (1-2 недели)
 
 ### T7: Интеграция индикаторов с коллектором
-- [ ] Создать `app/collectors/indicator_collector.py`
+- [x] Создать `app/collectors/indicator_collector.py`
 - [ ] Интегрировать расчёт EMA, RSI, ATR при загрузке свечей
-- [ ] Сохранение индикаторов в DDS слой
+- [x] Сохранение индикаторов в DDS слой
 - [ ] Инкрементальный пересчёт индикаторов
 
 **Результат**: При загрузке свечей автоматически рассчитываются индикаторы
 
 ### T8: Создание DDS слоя
-- [ ] Создать `sql/002_create_dds.sql`
-- [ ] Таблицы: `dds.instrument`, `dds.candle`, `dds.indicator`, `dds.market_regime`
-- [ ] Нормализация данных из RAW в DDS
-- [ ] Проверка качества OHLCV данных
-- [ ] Создание индексов для производительности
+- [x] Создать `sql/002_create_dds.sql`
+- [x] Таблицы: `dds.instrument`, `dds.candle`, `dds.indicator`, `dds.market_regime`
+- [x] Нормализация данных из RAW в DDS
+- [x] Проверка качества OHLCV данных
+- [x] Создание индексов для производительности
 
 **Результат**: Нормализованный слой данных для стратегий
 
 ### T9: Контроль качества данных
-- [ ] Проверка: high >= open, high >= close
-- [ ] Проверка: low <= open, low <= close
-- [ ] Проверка: high >= low, volume >= 0, close > 0
-- [ ] Исключение некорректных свечей
-- [ ] Отчёт о качестве данных
+- [x] Проверка: high >= open, high >= close
+- [x] Проверка: low <= open, low <= close
+- [x] Проверка: high >= low, volume >= 0, close > 0
+- [x] Исключение некорректных свечей
+- [x] Отчёт о качестве данных
 
 **Результат**: Чистые данные без аномалий
 
 ### T10: Создание MART слоя
-- [ ] Создать `sql/003_create_mart.sql`
-- [ ] Таблицы: `mart.daily_performance`, `mart.strategy_performance`
+- [x] Создать `sql/003_create_mart.sql`
+- [x] Таблицы: `mart.daily_performance`, `mart.strategy_performance`
 - [ ] Агрегация данных для отчётности
 - [ ] ETL процесс из DDS в MART
 

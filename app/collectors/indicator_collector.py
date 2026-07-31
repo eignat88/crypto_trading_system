@@ -1,15 +1,15 @@
 from decimal import Decimal
-from typing import Optional
+
 import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.connection import async_session_factory
-from app.indicators.ema import calculate_ema
-from app.indicators.rsi import calculate_rsi
 from app.indicators.atr import calculate_atr
+from app.indicators.ema import calculate_ema
+from app.indicators.market_regime import MarketRegimeDetector
+from app.indicators.rsi import calculate_rsi
 from app.indicators.volatility import calculate_historical_volatility
-from app.indicators.market_regime import MarketRegimeDetector, MarketRegime
 
 logger = structlog.get_logger()
 
@@ -152,7 +152,7 @@ class IndicatorCollector:
 
     async def _get_instrument_id(
         self, session: AsyncSession, symbol: str
-    ) -> Optional[int]:
+    ) -> int | None:
         """Get instrument_id for a symbol."""
         result = await session.execute(
             text(
@@ -203,7 +203,9 @@ class IndicatorCollector:
         await session.execute(
             text(
                 """
-                INSERT INTO dds.indicator (candle_id, indicator_name, indicator_value, indicator_params)
+                INSERT INTO dds.indicator (
+                    candle_id, indicator_name, indicator_value, indicator_params
+                )
                 VALUES (:candle_id, :indicator_name, :value, :params)
                 ON CONFLICT (candle_id, indicator_name, indicator_params)
                 DO UPDATE SET indicator_value = :value, calculated_at = now()
@@ -224,11 +226,11 @@ class IndicatorCollector:
         regime: str,
         confidence: Decimal,
         reasons: list[str],
-        ema_20: Optional[Decimal],
-        ema_50: Optional[Decimal],
-        ema_200: Optional[Decimal],
-        atr_percentage: Optional[Decimal],
-        volatility: Optional[Decimal],
+        ema_20: Decimal | None,
+        ema_50: Decimal | None,
+        ema_200: Decimal | None,
+        atr_percentage: Decimal | None,
+        volatility: Decimal | None,
     ):
         """Store market regime."""
         import json

@@ -1,74 +1,108 @@
-from decimal import Decimal
+"""Fail-closed pre-trade risk controls and durable risk-state hooks."""
+
+from __future__ import annotations
+
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from enum import Enum
-from typing import Optional
+from datetime import UTC, datetime
+from decimal import Decimal
+from enum import StrEnum
+from typing import Any, Protocol
+
 import structlog
 
 logger = structlog.get_logger()
 
 
-class RiskLevel(str, Enum):
+class RiskLevel(StrEnum):
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
     CRITICAL = "CRITICAL"
 
 
-class RiskEvent(str, Enum):
+class RiskEvent(StrEnum):
+    MAX_RISK_PER_TRADE = "MAX_RISK_PER_TRADE"
     MAX_POSITION_SIZE = "MAX_POSITION_SIZE"
     MAX_ASSET_EXPOSURE = "MAX_ASSET_EXPOSURE"
     MAX_CAPITAL_UTILIZATION = "MAX_CAPITAL_UTILIZATION"
+    INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE"
     DAILY_LOSS_LIMIT = "DAILY_LOSS_LIMIT"
     WEEKLY_LOSS_LIMIT = "WEEKLY_LOSS_LIMIT"
     MAX_DRAWDOWN = "MAX_DRAWDOWN"
     EMERGENCY_STOP = "EMERGENCY_STOP"
     STALE_DATA = "STALE_DATA"
     API_UNAVAILABLE = "API_UNAVAILABLE"
+    DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE"
+    RECONCILIATION_FAILED = "RECONCILIATION_FAILED"
+    UNKNOWN_ORDER_STATUS = "UNKNOWN_ORDER_STATUS"
+    INVALID_TRADE = "INVALID_TRADE"
     BALANCE_MISMATCH = "BALANCE_MISMATCH"
 
 
 @dataclass
 class RiskConfig:
-    """Risk management configuration."""
-    max_risk_per_trade: Decimal = Decimal("0.005")  # 0.5%
-    max_position_size: Decimal = Decimal("0.10")  # 10%
-    max_asset_exposure: Decimal = Decimal("0.25")  # 25%
-    max_capital_utilization: Decimal = Decimal("0.60")  # 60%
-    daily_loss_limit: Decimal = Decimal("0.02")  # 2%
-    weekly_loss_limit: Decimal = Decimal("0.05")  # 5%
-    max_drawdown: Decimal = Decimal("0.10")  # 10%
+    max_risk_per_trade: Decimal = Decimal("0.005")
+    max_position_size: Decimal = Decimal("0.10")
+    max_asset_exposure: Decimal = Decimal("0.25")
+    max_capital_utilization: Decimal = Decimal("0.60")
+    daily_loss_limit: Decimal = Decimal("0.02")
+    weekly_loss_limit: Decimal = Decimal("0.05")
+    max_drawdown: Decimal = Decimal("0.10")
     max_open_positions: int = 5
     stale_data_threshold_minutes: int = 5
 
 
 @dataclass
 class RiskCheckResult:
-    """Result of risk check."""
     approved: bool
     risk_level: RiskLevel
     reasons: list[str]
     events: list[RiskEvent]
-    adjusted_quantity: Optional[Decimal] = None
+    adjusted_quantity: Decimal | None = None
+
+
+class RiskStateStore(Protocol):
+    """Synchronous persistence boundary; production implementations may use PostgreSQL."""
+
+    def load_state(self) -> dict[str, Any] | None: ...
+
+    def save_state(self, state: dict[str, Any]) -> None: ...
+
+    def save_event(self, event: dict[str, Any]) -> None: ...
+
+
+KNOWN_ORDER_STATUSES = frozenset(
+    {"new", "created", "open", "partially_filled", "filled", "cancelled", "canceled", "rejected"}
+)
 
 
 class RiskEngine:
-    """
-    Risk Engine that validates all trading decisions.
+    """Validate every trade request; missing operational certainty blocks new risk."""
 
-    The strategy can only create a trade request.
-    The Risk Engine decides whether to execute it.
-    """
-
-    def __init__(self, config: RiskConfig = None):
+    def __init__(self, config: RiskConfig | None = None, state_store: RiskStateStore | None = None):
         self.config = config or RiskConfig()
+        self.state_store = state_store
         self.daily_pnl = Decimal("0")
         self.weekly_pnl = Decimal("0")
         self.peak_equity = Decimal("0")
         self.current_equity = Decimal("0")
         self.is_emergency_stop = False
-        self.last_data_time: Optional[datetime] = None
+        self.emergency_stop_reason = ""
+        self.last_data_time: datetime | None = None
         self.consecutive_errors = 0
+        self.database_available = True
+        self.api_available = True
+        self.reconciliation_ok = True
+        if state_store:
+            state = state_store.load_state()
+            if state:
+                self._restore_state(state)
+
+    @staticmethod
+    def _position_signed_value(position: dict[str, Any]) -> Decimal:
+        value = Decimal(str(position.get("value", 0)))
+        side = str(position.get("side", "buy")).lower()
+        return -abs(value) if side in {"sell", "short"} else abs(value)
 
     def check_trade(
         self,
@@ -77,194 +111,234 @@ class RiskEngine:
         quantity: Decimal,
         price: Decimal,
         current_balance: Decimal,
-        current_positions: dict,
+        current_positions: dict[str, dict[str, Any]],
         total_capital: Decimal,
+        *,
+        stop_loss_price: Decimal | None = None,
+        database_available: bool | None = None,
+        api_available: bool | None = None,
+        reconciliation_ok: bool | None = None,
+        order_statuses: list[str] | None = None,
     ) -> RiskCheckResult:
-        """
-        Validate a trade request against risk limits.
-
-        Args:
-            symbol: Trading pair
-            side: 'buy' or 'sell'
-            quantity: Requested quantity
-            price: Current price
-            current_balance: Available balance
-            current_positions: Dict of current positions
-            total_capital: Total portfolio capital
-
-        Returns:
-            RiskCheckResult with approval status
-        """
-        reasons = []
-        events = []
+        reasons: list[str] = []
+        events: list[RiskEvent] = []
         risk_level = RiskLevel.LOW
 
-        # Check emergency stop
+        def reject(reason: str, event: RiskEvent, level: RiskLevel = RiskLevel.HIGH) -> None:
+            nonlocal risk_level
+            reasons.append(reason)
+            events.append(event)
+            if list(RiskLevel).index(level) > list(RiskLevel).index(risk_level):
+                risk_level = level
+
+        side = side.lower()
+        if side not in {"buy", "sell"} or quantity <= 0 or price <= 0 or total_capital <= 0:
+            reject(
+                "Trade side and monetary values must be valid",
+                RiskEvent.INVALID_TRADE,
+                RiskLevel.CRITICAL,
+            )
         if self.is_emergency_stop:
-            reasons.append("Emergency stop is active")
-            events.append(RiskEvent.EMERGENCY_STOP)
-            return RiskCheckResult(
-                approved=False,
-                risk_level=RiskLevel.CRITICAL,
-                reasons=reasons,
-                events=events,
+            reject("Emergency stop is active", RiskEvent.EMERGENCY_STOP, RiskLevel.CRITICAL)
+        if not (self.database_available if database_available is None else database_available):
+            reject("PostgreSQL is unavailable", RiskEvent.DATABASE_UNAVAILABLE, RiskLevel.CRITICAL)
+        if not (self.api_available if api_available is None else api_available):
+            reject("Exchange API is unavailable", RiskEvent.API_UNAVAILABLE, RiskLevel.CRITICAL)
+        if not (self.reconciliation_ok if reconciliation_ok is None else reconciliation_ok):
+            reject(
+                "Latest reconciliation did not succeed",
+                RiskEvent.RECONCILIATION_FAILED,
+                RiskLevel.CRITICAL,
             )
-
-        # Check stale data
+        unknown = sorted(
+            {s for s in (order_statuses or []) if s.lower() not in KNOWN_ORDER_STATUSES}
+        )
+        if unknown:
+            reject(
+                f"Unknown order status: {', '.join(unknown)}",
+                RiskEvent.UNKNOWN_ORDER_STATUS,
+                RiskLevel.CRITICAL,
+            )
         if self.last_data_time:
-            data_age = (datetime.now(timezone.utc) - self.last_data_time).total_seconds() / 60
-            if data_age > self.config.stale_data_threshold_minutes:
-                reasons.append(f"Data is stale: {data_age:.1f} minutes old")
-                events.append(RiskEvent.STALE_DATA)
-                risk_level = RiskLevel.HIGH
+            timestamp = self.last_data_time
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
+            age = (datetime.now(UTC) - timestamp).total_seconds() / 60
+            if age > self.config.stale_data_threshold_minutes:
+                reject(f"Data is stale: {age:.1f} minutes old", RiskEvent.STALE_DATA)
 
-        # Calculate position value
-        position_value = quantity * price
-        position_pct = position_value / total_capital if total_capital > 0 else Decimal("0")
+        order_value = quantity * price
+        symbol_positions = [p for p in current_positions.values() if p.get("symbol") == symbol]
+        before = sum((self._position_signed_value(p) for p in symbol_positions), Decimal("0"))
+        delta = order_value if side == "buy" else -order_value
+        after = before + delta
+        exposure_increase = max(abs(after) - abs(before), Decimal("0"))
+        reducing = exposure_increase == 0
 
-        # Check position size limit
-        if position_pct > self.config.max_position_size:
-            reasons.append(
-                f"Position size {position_pct:.2%} exceeds limit {self.config.max_position_size:.2%}"
+        if not reducing:
+            position_pct = exposure_increase / total_capital
+            if position_pct > self.config.max_position_size:
+                reject(
+                    f"Position size {position_pct:.2%} exceeds limit "
+                    f"{self.config.max_position_size:.2%}",
+                    RiskEvent.MAX_POSITION_SIZE,
+                )
+            if exposure_increase > current_balance:
+                reject(
+                    f"Available balance {current_balance} is below required {exposure_increase}",
+                    RiskEvent.INSUFFICIENT_BALANCE,
+                )
+            if stop_loss_price is not None:
+                risk_amount = (exposure_increase / price) * abs(price - stop_loss_price)
+                risk_pct = risk_amount / total_capital
+                if risk_pct > self.config.max_risk_per_trade:
+                    reject(
+                        f"Trade risk {risk_pct:.2%} exceeds limit "
+                        f"{self.config.max_risk_per_trade:.2%}",
+                        RiskEvent.MAX_RISK_PER_TRADE,
+                    )
+
+        asset_pct = abs(after) / total_capital
+        if not reducing and asset_pct > self.config.max_asset_exposure:
+            reject(
+                f"Asset exposure {asset_pct:.2%} exceeds limit "
+                f"{self.config.max_asset_exposure:.2%}",
+                RiskEvent.MAX_ASSET_EXPOSURE,
             )
-            events.append(RiskEvent.MAX_POSITION_SIZE)
-            risk_level = RiskLevel.HIGH
-
-        # Check asset exposure
-        asset_exposure = sum(
-            pos.get("value", Decimal("0"))
-            for pos in current_positions.values()
-            if pos.get("symbol") == symbol
+        other_exposure = sum(
+            (
+                abs(self._position_signed_value(p))
+                for p in current_positions.values()
+                if p.get("symbol") != symbol
+            ),
+            Decimal("0"),
         )
-        asset_exposure += position_value
-        asset_pct = asset_exposure / total_capital if total_capital > 0 else Decimal("0")
-
-        if asset_pct > self.config.max_asset_exposure:
-            reasons.append(
-                f"Asset exposure {asset_pct:.2%} exceeds limit {self.config.max_asset_exposure:.2%}"
+        utilization = (other_exposure + abs(after)) / total_capital
+        if not reducing and utilization > self.config.max_capital_utilization:
+            reject(
+                f"Capital utilization {utilization:.2%} exceeds limit "
+                f"{self.config.max_capital_utilization:.2%}",
+                RiskEvent.MAX_CAPITAL_UTILIZATION,
             )
-            events.append(RiskEvent.MAX_ASSET_EXPOSURE)
-            risk_level = RiskLevel.HIGH
-
-        # Check capital utilization
-        total_position_value = sum(
-            pos.get("value", Decimal("0")) for pos in current_positions.values()
-        )
-        total_position_value += position_value
-        utilization = total_position_value / total_capital if total_capital > 0 else Decimal("0")
-
-        if utilization > self.config.max_capital_utilization:
-            reasons.append(
-                f"Capital utilization {utilization:.2%} exceeds limit {self.config.max_capital_utilization:.2%}"
+        if (
+            self.daily_pnl < 0
+            and abs(self.daily_pnl) / total_capital > self.config.daily_loss_limit
+        ):
+            reject("Daily loss limit exceeded", RiskEvent.DAILY_LOSS_LIMIT, RiskLevel.CRITICAL)
+        if (
+            self.weekly_pnl < 0
+            and abs(self.weekly_pnl) / total_capital > self.config.weekly_loss_limit
+        ):
+            reject("Weekly loss limit exceeded", RiskEvent.WEEKLY_LOSS_LIMIT, RiskLevel.CRITICAL)
+        if (
+            self.peak_equity > 0
+            and (self.peak_equity - self.current_equity) / self.peak_equity
+            > self.config.max_drawdown
+        ):
+            reject("Maximum drawdown exceeded", RiskEvent.MAX_DRAWDOWN, RiskLevel.CRITICAL)
+        if (
+            not reducing
+            and symbol not in {p.get("symbol") for p in current_positions.values()}
+            and len(current_positions) >= self.config.max_open_positions
+        ):
+            reject(
+                f"Too many open positions: {len(current_positions)}",
+                RiskEvent.MAX_POSITION_SIZE,
+                RiskLevel.MEDIUM,
             )
-            events.append(RiskEvent.MAX_CAPITAL_UTILIZATION)
-            risk_level = RiskLevel.HIGH
 
-        # Check daily loss limit
-        if self.daily_pnl < 0:
-            daily_loss_pct = abs(self.daily_pnl) / total_capital if total_capital > 0 else Decimal("0")
-            if daily_loss_pct > self.config.daily_loss_limit:
-                reasons.append(
-                    f"Daily loss {daily_loss_pct:.2%} exceeds limit {self.config.daily_loss_limit:.2%}"
-                )
-                events.append(RiskEvent.DAILY_LOSS_LIMIT)
-                risk_level = RiskLevel.CRITICAL
-
-        # Check weekly loss limit
-        if self.weekly_pnl < 0:
-            weekly_loss_pct = abs(self.weekly_pnl) / total_capital if total_capital > 0 else Decimal("0")
-            if weekly_loss_pct > self.config.weekly_loss_limit:
-                reasons.append(
-                    f"Weekly loss {weekly_loss_pct:.2%} exceeds limit {self.config.weekly_loss_limit:.2%}"
-                )
-                events.append(RiskEvent.WEEKLY_LOSS_LIMIT)
-                risk_level = RiskLevel.CRITICAL
-
-        # Check drawdown
-        if self.peak_equity > 0:
-            drawdown = (self.peak_equity - self.current_equity) / self.peak_equity
-            if drawdown > self.config.max_drawdown:
-                reasons.append(
-                    f"Drawdown {drawdown:.2%} exceeds limit {self.config.max_drawdown:.2%}"
-                )
-                events.append(RiskEvent.MAX_DRAWDOWN)
-                risk_level = RiskLevel.CRITICAL
-
-        # Check number of open positions
-        if len(current_positions) >= self.config.max_open_positions:
-            reasons.append(
-                f"Too many open positions: {len(current_positions)} >= {self.config.max_open_positions}"
-            )
-            risk_level = RiskLevel.MEDIUM
-
-        # Determine approval
-        approved = len(reasons) == 0
-
-        # Calculate adjusted quantity if position size too large
         adjusted_quantity = None
-        if not approved and position_pct > self.config.max_position_size:
-            max_value = total_capital * self.config.max_position_size
-            adjusted_quantity = max_value / price
+        if RiskEvent.MAX_POSITION_SIZE in events:
+            adjusted_quantity = total_capital * self.config.max_position_size / price
             reasons.append(f"Adjusted quantity to {adjusted_quantity}")
+        result = RiskCheckResult(not reasons, risk_level, reasons, events, adjusted_quantity)
+        if events:
+            self._persist_events(symbol, side, quantity, price, result)
+            logger.warning("trade_rejected", symbol=symbol, side=side, reasons=reasons)
+        return result
 
-        # Log risk check
-        if not approved:
-            logger.warning(
-                "trade_rejected",
-                symbol=symbol,
-                side=side,
-                quantity=quantity,
-                price=price,
-                risk_level=risk_level.value,
-                reasons=reasons,
-                events=[e.value for e in events],
+    def _persist_events(
+        self, symbol: str, side: str, quantity: Decimal, price: Decimal, result: RiskCheckResult
+    ) -> None:
+        if not self.state_store:
+            return
+        occurred_at = datetime.now(UTC).isoformat()
+        for event in result.events:
+            self.state_store.save_event(
+                {
+                    "event_type": event.value,
+                    "risk_level": result.risk_level.value,
+                    "symbol": symbol,
+                    "side": side,
+                    "quantity": str(quantity),
+                    "price": str(price),
+                    "reasons": result.reasons,
+                    "occurred_at": occurred_at,
+                }
             )
 
-        return RiskCheckResult(
-            approved=approved,
-            risk_level=risk_level,
-            reasons=reasons,
-            events=events,
-            adjusted_quantity=adjusted_quantity,
+    def _state(self) -> dict[str, Any]:
+        return {
+            "daily_pnl": str(self.daily_pnl),
+            "weekly_pnl": str(self.weekly_pnl),
+            "peak_equity": str(self.peak_equity),
+            "current_equity": str(self.current_equity),
+            "is_emergency_stop": self.is_emergency_stop,
+            "emergency_stop_reason": self.emergency_stop_reason,
+            "consecutive_errors": self.consecutive_errors,
+        }
+
+    def _restore_state(self, state: dict[str, Any]) -> None:
+        for field in ("daily_pnl", "weekly_pnl", "peak_equity", "current_equity"):
+            setattr(self, field, Decimal(str(state.get(field, "0"))))
+        self.is_emergency_stop = bool(state.get("is_emergency_stop", False))
+        self.emergency_stop_reason = str(state.get("emergency_stop_reason", ""))
+        self.consecutive_errors = int(state.get("consecutive_errors", 0))
+
+    def _save_state(self) -> None:
+        if self.state_store:
+            self.state_store.save_state(self._state())
+
+    def update_system_health(self, *, database_available: bool, api_available: bool) -> None:
+        self.database_available, self.api_available = database_available, api_available
+
+    def update_reconciliation(self, successful: bool) -> None:
+        self.reconciliation_ok = successful
+
+    def update_pnl(self, daily_pnl: Decimal, weekly_pnl: Decimal) -> None:
+        self.daily_pnl, self.weekly_pnl = daily_pnl, weekly_pnl
+        self._save_state()
+
+    def update_equity(self, equity: Decimal) -> None:
+        self.current_equity = equity
+        self.peak_equity = max(self.peak_equity, equity)
+        self._save_state()
+
+    def set_emergency_stop(self, active: bool, reason: str = "") -> None:
+        self.is_emergency_stop, self.emergency_stop_reason = active, reason if active else ""
+        self._save_state()
+        logger.critical("emergency_stop_activated", reason=reason) if active else logger.info(
+            "emergency_stop_deactivated"
         )
 
-    def update_pnl(self, daily_pnl: Decimal, weekly_pnl: Decimal):
-        """Update PnL for risk calculations."""
-        self.daily_pnl = daily_pnl
-        self.weekly_pnl = weekly_pnl
-
-    def update_equity(self, equity: Decimal):
-        """Update equity and peak equity."""
-        self.current_equity = equity
-        if equity > self.peak_equity:
-            self.peak_equity = equity
-
-    def set_emergency_stop(self, active: bool, reason: str = ""):
-        """Activate or deactivate emergency stop."""
-        self.is_emergency_stop = active
-        if active:
-            logger.critical("emergency_stop_activated", reason=reason)
-        else:
-            logger.info("emergency_stop_deactivated")
-
-    def update_data_time(self, timestamp: datetime):
-        """Update last data timestamp."""
+    def update_data_time(self, timestamp: datetime) -> None:
         self.last_data_time = timestamp
 
-    def record_error(self):
-        """Record a system error."""
+    def record_error(self) -> None:
         self.consecutive_errors += 1
         if self.consecutive_errors >= 5:
             self.set_emergency_stop(True, "Too many consecutive errors")
+        else:
+            self._save_state()
 
-    def reset_errors(self):
-        """Reset error counter."""
+    def reset_errors(self) -> None:
         self.consecutive_errors = 0
+        self._save_state()
 
-    def reset_daily(self):
-        """Reset daily PnL (call at start of new day)."""
+    def reset_daily(self) -> None:
         self.daily_pnl = Decimal("0")
+        self._save_state()
 
-    def reset_weekly(self):
-        """Reset weekly PnL (call at start of new week)."""
+    def reset_weekly(self) -> None:
         self.weekly_pnl = Decimal("0")
+        self._save_state()

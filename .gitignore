@@ -41,6 +41,9 @@ ENV/
 logs/
 *.log
 
+# Local PostgreSQL diagnostics (may contain host and schema details)
+monitoring/diagnostic_reports/
+
 # Data
 data/
 

@@ -1,11 +1,10 @@
 from decimal import Decimal
-from typing import Optional
 
 
 def calculate_rsi(
     prices: list[Decimal],
     period: int = 14,
-) -> Optional[Decimal]:
+) -> Decimal | None:
     """
     Calculate Relative Strength Index (RSI).
 
@@ -48,7 +47,7 @@ def calculate_rsi(
 def calculate_rsi_series(
     prices: list[Decimal],
     period: int = 14,
-) -> list[Optional[Decimal]]:
+) -> list[Decimal | None]:
     """
     Calculate RSI series for all prices.
 
@@ -62,7 +61,7 @@ def calculate_rsi_series(
     if len(prices) < period + 1:
         return [None] * len(prices)
 
-    rsi_values: list[Optional[Decimal]] = [None] * period
+    rsi_values: list[Decimal | None] = [None] * period
 
     # Calculate price changes
     changes = [prices[i] - prices[i - 1] for i in range(1, len(prices))]

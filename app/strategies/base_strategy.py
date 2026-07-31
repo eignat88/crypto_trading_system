@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 
 
 @dataclass
@@ -14,8 +13,8 @@ class Signal:
     quantity: Decimal
     timestamp: datetime
     reason: str = ""
-    stop_loss: Optional[Decimal] = None
-    take_profit: Optional[Decimal] = None
+    stop_loss: Decimal | None = None
+    take_profit: Decimal | None = None
 
 
 class BaseStrategy(ABC):
@@ -32,7 +31,7 @@ class BaseStrategy(ABC):
         candle: dict,
         indicators: dict,
         portfolio_state: dict,
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Determine if we should enter a position.
 
@@ -52,7 +51,7 @@ class BaseStrategy(ABC):
         candle: dict,
         indicators: dict,
         position: dict,
-    ) -> Optional[Signal]:
+    ) -> Signal | None:
         """
         Determine if we should exit a position.
 

@@ -1,11 +1,10 @@
 from decimal import Decimal
-from typing import Optional
 
 
 def calculate_average_volume(
     volumes: list[Decimal],
     period: int = 20,
-) -> Optional[Decimal]:
+) -> Decimal | None:
     """
     Calculate Average Volume.
 
@@ -45,7 +44,7 @@ def calculate_volume_trend(
     volumes: list[Decimal],
     short_period: int = 5,
     long_period: int = 20,
-) -> Optional[str]:
+) -> str | None:
     """
     Calculate Volume Trend.
 
@@ -79,7 +78,7 @@ def calculate_volume_trend(
 def calculate_on_balance_volume(
     closes: list[Decimal],
     volumes: list[Decimal],
-) -> Optional[list[Decimal]]:
+) -> list[Decimal] | None:
     """
     Calculate On-Balance Volume (OBV).
 
@@ -114,7 +113,7 @@ def calculate_vwap(
     lows: list[Decimal],
     closes: list[Decimal],
     volumes: list[Decimal],
-) -> Optional[Decimal]:
+) -> Decimal | None:
     """
     Calculate Volume Weighted Average Price (VWAP).
 
