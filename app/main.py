@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 import sys
 
 import structlog
@@ -17,7 +17,7 @@ structlog.configure(
         structlog.dev.ConsoleRenderer(),
     ],
     wrapper_class=structlog.make_filtering_bound_logger(
-        structlog.stdlib._NAME_TO_LEVEL[settings.log_level.lower()]
+        structlog.stdlib.NAME_TO_LEVEL[settings.log_level.lower()]
     ),
     context_class=dict,
     logger_factory=structlog.PrintLoggerFactory(),
@@ -46,3 +46,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
