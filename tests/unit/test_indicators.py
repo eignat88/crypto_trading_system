@@ -106,8 +106,13 @@ class TestVolatility:
         for _ in range(1, 30):
             constant_return_closes.append(constant_return_closes[-1] * Decimal("1.01"))
 
-        constant_return_result = calculate_historical_volatility(constant_return_closes, 20)
-        assert constant_return_result == 0
+        for annualize in (True, False):
+            constant_return_result = calculate_historical_volatility(
+                constant_return_closes,
+                20,
+                annualize=annualize,
+            )
+            assert constant_return_result == Decimal("0")
 
     def test_volatility_regime(self):
         assert calculate_volatility_regime(Decimal("0.2")) == "LOW"

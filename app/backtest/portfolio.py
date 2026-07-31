@@ -1,30 +1,8 @@
-from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
-
-@dataclass
-class Position:
-    """Represents a trading position."""
-    symbol: str
-    side: str  # Spot portfolios only support 'long'.
-    entry_price: Decimal
-    quantity: Decimal
-    entry_time: datetime
-    stop_loss: Decimal | None = None
-    take_profit: Decimal | None = None
-    trailing_stop: Decimal | None = None
-    unrealized_pnl: Decimal = Decimal("0")
-    current_price: Decimal | None = None
-    entry_commission: Decimal = Decimal("0")
-
-    @property
-    def position_value(self) -> Decimal:
-        return (self.current_price or self.entry_price) * self.quantity
-
-    def update_pnl(self, current_price: Decimal):
-        self.current_price = current_price
-        self.unrealized_pnl = (current_price - self.entry_price) * self.quantity
+from app.models import Position
 
 
 class Portfolio:
@@ -35,26 +13,33 @@ class Portfolio:
         self.balance = initial_balance
         self.positions: dict[str, Position] = {}
         self.closed_positions: list[Position] = []
-        self.trade_history: list[dict] = []
+        self.trade_history: list[dict[str, Any]] = []
         self.equity_history: list[tuple[datetime, Decimal]] = []
         self.max_drawdown = Decimal("0")
 
     @property
     def total_equity(self) -> Decimal:
         """Calculate total portfolio equity."""
-        positions_value = sum(pos.position_value for pos in self.positions.values())
+        positions_value = sum(
+            (pos.position_value for pos in self.positions.values()),
+            Decimal("0"),
+        )
         return self.balance + positions_value
 
     @property
     def unrealized_pnl(self) -> Decimal:
         """Calculate total unrealized PnL."""
-        return sum(pos.unrealized_pnl for pos in self.positions.values())
+        return sum(
+            (pos.unrealized_pnl for pos in self.positions.values()),
+            Decimal("0"),
+        )
 
     @property
     def realized_pnl(self) -> Decimal:
         """Calculate total realized PnL."""
         return sum(
-            trade.get("pnl", Decimal("0")) for trade in self.trade_history
+            (Decimal(str(trade.get("pnl", "0"))) for trade in self.trade_history),
+            Decimal("0"),
         )
 
     def open_position(
@@ -96,6 +81,7 @@ class Portfolio:
                 take_profit=take_profit,
                 current_price=price,
                 entry_commission=commission,
+                high_water_mark=price,
             )
             self.positions[symbol] = position
         else:
@@ -109,7 +95,7 @@ class Portfolio:
             position.current_price = price
             position.stop_loss = stop_loss if stop_loss is not None else position.stop_loss
             position.take_profit = take_profit if take_profit is not None else position.take_profit
-            position.update_pnl(price)
+            position.update_market(price, price)
 
         self.trade_history.append({
             "type": "open",
@@ -172,11 +158,19 @@ class Portfolio:
 
         return pnl
 
-    def update_positions(self, prices: dict[str, Decimal], timestamp: datetime):
+    def update_positions(
+        self,
+        prices: dict[str, Decimal],
+        timestamp: datetime,
+        highs: dict[str, Decimal] | None = None,
+    ) -> None:
         """Update unrealized PnL for all positions."""
         for symbol, position in self.positions.items():
             if symbol in prices:
-                position.update_pnl(prices[symbol])
+                position.update_market(
+                    prices[symbol],
+                    (highs or {}).get(symbol),
+                )
 
         # Record equity
         self.equity_history.append((timestamp, self.total_equity))

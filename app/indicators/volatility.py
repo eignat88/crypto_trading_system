@@ -33,6 +33,13 @@ def calculate_historical_volatility(
 
     # Calculate standard deviation of log returns
     recent_returns = log_returns[-period:]
+    first_return = recent_returns[0]
+    if all(
+        math.isclose(value, first_return, rel_tol=0.0, abs_tol=1e-15)
+        for value in recent_returns[1:]
+    ):
+        return Decimal("0")
+
     mean_return = sum(recent_returns) / len(recent_returns)
     variance = sum((r - mean_return) ** 2 for r in recent_returns) / (len(recent_returns) - 1)
     std_dev = math.sqrt(variance)

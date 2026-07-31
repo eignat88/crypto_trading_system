@@ -21,7 +21,11 @@ class SlippageConfig:
 class SlippageModel:
     """Models price slippage for trades."""
 
-    def __init__(self, config: SlippageConfig = None, seed: int = None):
+    def __init__(
+        self,
+        config: SlippageConfig | None = None,
+        seed: int | None = None,
+    ) -> None:
         self.config = config or SlippageConfig()
         if seed is not None:
             random.seed(seed)
@@ -30,7 +34,7 @@ class SlippageModel:
         self,
         price: Decimal,
         quantity: Decimal,
-        average_volume: Decimal = None,
+        average_volume: Decimal | None = None,
         is_buy: bool = True,
     ) -> Decimal:
         """
