@@ -235,6 +235,54 @@ async def test_large_range_is_split_into_bounded_forward_windows(
 
 
 @async_test
+async def test_candles_at_or_after_end_are_not_saved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    end = START + timedelta(minutes=10)
+
+    class Exchange:
+        async def get_candles(self, **_: Any) -> CandleBatch:
+            return CandleBatch(
+                [
+                    candle(START),
+                    candle(START + timedelta(minutes=5)),
+                    candle(end),
+                    candle(end + timedelta(minutes=5)),
+                ],
+                response_payload={"result": {"list": ["original-response"]}},
+            )
+
+    session = Session()
+    monkeypatch.setattr(collector_module, "async_session_factory", lambda: session)
+
+    loaded = await CandleCollector(Exchange()).load_historical_candles(
+        "BTCUSDT", "5m", START, end, batch_size=3
+    )
+
+    candle_params = [
+        params
+        for sql, params in session.calls
+        if "INSERT INTO raw_market.candles" in sql
+    ]
+    assert loaded == 2
+    assert [params["open_time"] for params in candle_params if params is not None] == [
+        START,
+        START + timedelta(minutes=5),
+    ]
+    assert all(
+        params is not None and params["open_time"] < end
+        for params in candle_params
+    )
+    journal_params = next(
+        params
+        for sql, params in session.calls
+        if "INSERT INTO raw_system.loading_journal" in sql
+    )
+    assert journal_params is not None
+    assert journal_params["end_time"] == START + timedelta(minutes=5)
+
+
+@async_test
 async def test_batch_provenance_and_checkpoint_roll_back_together(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
