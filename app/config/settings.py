@@ -1,14 +1,15 @@
-from pydantic_settings import BaseSettings
+from enum import StrEnum
+
 from pydantic import Field
-from enum import Enum
+from pydantic_settings import BaseSettings
 
 
-class TradingMode(str, Enum):
+class TradingMode(StrEnum):
     PAPER = "paper"
     LIVE = "live"
 
 
-class ExchangeName(str, Enum):
+class ExchangeName(StrEnum):
     BYBIT = "bybit"
 
 

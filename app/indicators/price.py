@@ -1,5 +1,4 @@
 from decimal import Decimal
-from typing import Optional
 
 
 def calculate_price_change(
@@ -24,7 +23,7 @@ def calculate_price_change(
 def calculate_price_change_series(
     closes: list[Decimal],
     period: int = 1,
-) -> list[Optional[Decimal]]:
+) -> list[Decimal | None]:
     """
     Calculate price change series.
 
@@ -38,7 +37,7 @@ def calculate_price_change_series(
     if len(closes) < period + 1:
         return [None] * len(closes)
 
-    changes: list[Optional[Decimal]] = [None] * period
+    changes: list[Decimal | None] = [None] * period
 
     for i in range(period, len(closes)):
         if closes[i - period] > 0:
@@ -91,7 +90,7 @@ def calculate_high_low_range(
 def calculate_max_period(
     prices: list[Decimal],
     period: int,
-) -> Optional[Decimal]:
+) -> Decimal | None:
     """
     Calculate maximum price in period.
 
@@ -111,7 +110,7 @@ def calculate_max_period(
 def calculate_min_period(
     prices: list[Decimal],
     period: int,
-) -> Optional[Decimal]:
+) -> Decimal | None:
     """
     Calculate minimum price in period.
 

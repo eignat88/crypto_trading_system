@@ -1,5 +1,4 @@
 from decimal import Decimal
-from typing import Optional
 
 
 def calculate_true_range(
@@ -23,7 +22,7 @@ def calculate_atr(
     lows: list[Decimal],
     closes: list[Decimal],
     period: int = 14,
-) -> Optional[Decimal]:
+) -> Decimal | None:
     """
     Calculate Average True Range (ATR).
 
@@ -60,7 +59,7 @@ def calculate_atr_series(
     lows: list[Decimal],
     closes: list[Decimal],
     period: int = 14,
-) -> list[Optional[Decimal]]:
+) -> list[Decimal | None]:
     """
     Calculate ATR series for all prices.
 
@@ -76,7 +75,7 @@ def calculate_atr_series(
     if len(highs) < period + 1 or len(lows) < period + 1 or len(closes) < period + 1:
         return [None] * len(highs)
 
-    atr_values: list[Optional[Decimal]] = [None] * period
+    atr_values: list[Decimal | None] = [None] * period
 
     # Calculate True Range for each period
     true_ranges = []

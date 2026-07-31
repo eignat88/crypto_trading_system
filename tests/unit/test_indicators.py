@@ -1,23 +1,21 @@
-import pytest
 from decimal import Decimal
 
-from app.indicators.ema import calculate_ema, calculate_ema_series, calculate_ema_slope
-from app.indicators.rsi import calculate_rsi, calculate_rsi_series
-from app.indicators.atr import calculate_atr, calculate_atr_series, calculate_atr_percentage
+from app.indicators.atr import calculate_atr, calculate_atr_percentage
+from app.indicators.ema import calculate_ema, calculate_ema_series
+from app.indicators.price import (
+    calculate_distance_to_ema,
+    calculate_high_low_range,
+    calculate_price_change,
+)
+from app.indicators.rsi import calculate_rsi
 from app.indicators.volatility import (
     calculate_historical_volatility,
     calculate_volatility_regime,
-    calculate_bollinger_bands,
 )
 from app.indicators.volume import (
     calculate_average_volume,
     calculate_volume_ratio,
     calculate_volume_trend,
-)
-from app.indicators.price import (
-    calculate_price_change,
-    calculate_distance_to_ema,
-    calculate_high_low_range,
 )
 
 
