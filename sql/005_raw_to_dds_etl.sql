@@ -89,6 +89,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 AS $$
+#variable_conflict use_column
 DECLARE
     v_stream record;
     v_run_id bigint;
