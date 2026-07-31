@@ -1,20 +1,8 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
-
-@dataclass
-class Signal:
-    """Trading signal."""
-    action: str  # 'buy', 'sell', 'open_long', 'open_short', 'close'
-    symbol: str
-    price: Decimal
-    quantity: Decimal
-    timestamp: datetime
-    reason: str = ""
-    stop_loss: Decimal | None = None
-    take_profit: Decimal | None = None
+from app.models import Fill, Signal
 
 
 class BaseStrategy(ABC):
@@ -23,14 +11,14 @@ class BaseStrategy(ABC):
     def __init__(self, name: str, symbols: list[str]):
         self.name = name
         self.symbols = symbols
-        self.state = {}
+        self.state: dict[str, Any] = {}
 
     @abstractmethod
     def should_enter(
         self,
-        candle: dict,
-        indicators: dict,
-        portfolio_state: dict,
+        candle: dict[str, Any],
+        indicators: dict[str, Any],
+        portfolio_state: dict[str, Any],
     ) -> Signal | None:
         """
         Determine if we should enter a position.
@@ -48,9 +36,9 @@ class BaseStrategy(ABC):
     @abstractmethod
     def should_exit(
         self,
-        candle: dict,
-        indicators: dict,
-        position: dict,
+        candle: dict[str, Any],
+        indicators: dict[str, Any],
+        position: dict[str, Any],
     ) -> Signal | None:
         """
         Determine if we should exit a position.
@@ -92,10 +80,13 @@ class BaseStrategy(ABC):
 
         return risk_amount / price_risk
 
-    def update_state(self, key: str, value):
+    def on_fill(self, signal: Signal, fill: Fill) -> None:
+        """Update strategy state only after a signal was actually filled."""
+
+    def update_state(self, key: str, value: Any) -> None:
         """Update strategy state."""
         self.state[key] = value
 
-    def get_state(self, key: str, default=None):
+    def get_state(self, key: str, default: Any = None) -> Any:
         """Get strategy state."""
         return self.state.get(key, default)

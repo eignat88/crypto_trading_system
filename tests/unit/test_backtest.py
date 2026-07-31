@@ -7,6 +7,7 @@ from app.backtest.portfolio import Portfolio
 from app.backtest.slippage_model import SlippageModel
 from app.risk.risk_engine import RiskConfig, RiskEngine
 from app.strategies.base_strategy import Signal
+from app.strategies.trend_dca import TrendDCAStrategy
 
 
 class TestPortfolio:
@@ -228,3 +229,59 @@ class TestBacktestEngine:
             lambda *_: [{"action": "buy", "symbol": "BTCUSDT", "quantity": Decimal("1")}],
         )
         assert engine.portfolio.trade_history == []
+
+    def test_trend_dca_runs_through_risk_orders_and_fills(self):
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
+        prices = [Decimal("100"), Decimal("96"), Decimal("92"), Decimal("86"), Decimal("105")]
+        candles = []
+        for index, close in enumerate(prices):
+            candles.append({
+                "open_time": base_time + timedelta(hours=index),
+                "symbol": "BTCUSDT",
+                "open": close,
+                "high": close,
+                "low": close,
+                "close": close,
+                "volume": Decimal("1000"),
+                "indicators": {
+                    "ema_200": Decimal("90"),
+                    "ema_50": Decimal("95"),
+                    "rsi": Decimal("40"),
+                    "regime": "TREND_UP",
+                    "volatility": Decimal("0.2"),
+                },
+            })
+
+        engine = BacktestEngine(BacktestConfig(initial_balance=Decimal("5000")))
+        result = engine.run(candles, TrendDCAStrategy(["BTCUSDT"]))
+
+        buy_fills = [fill for fill in result.fills if fill.side == "buy"]
+        assert len(buy_fills) == 4
+        assert len(result.risk_decisions) == len(result.orders)
+        assert all(decision.approved for decision in result.risk_decisions)
+        assert sum(fill.price * fill.quantity for fill in buy_fills) <= Decimal("505")
+        assert result.total_trades == 1
+
+    def test_short_signal_is_not_supported(self):
+        now = datetime.now(UTC)
+        candle = {
+            "open_time": now,
+            "symbol": "BTCUSDT",
+            "close": Decimal("100"),
+        }
+
+        try:
+            self.engine._process_signal(
+                {
+                    "action": "open_short",
+                    "symbol": "BTCUSDT",
+                    "price": Decimal("100"),
+                    "quantity": Decimal("1"),
+                },
+                candle,
+                now,
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("open_short must be rejected by the spot backtest")

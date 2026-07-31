@@ -33,6 +33,8 @@ class TestTrendDCAStrategy:
         assert signal is not None
         assert signal.action == "open_long"
         assert signal.symbol == "BTCUSDT"
+        assert signal.quantity * signal.price == Decimal("125")
+        assert signal.stop_loss == signal.price * Decimal("0.85")
 
     def test_entry_no_position(self):
         candle = {
@@ -192,6 +194,27 @@ class TestTrendDCAStrategy:
         )
         assert signal is not None
         assert signal.reason == "Trailing stop hit"
+
+    def test_dca_level_advances_only_after_fill(self):
+        now = datetime.now(UTC)
+        candle = {
+            "symbol": "BTCUSDT",
+            "close": Decimal("96"),
+            "open_time": now,
+        }
+        position = {
+            "entry_price": Decimal("100"),
+            "quantity": Decimal("1"),
+            "capital": Decimal("5000"),
+        }
+
+        first = self.strategy.should_add_dca(candle, {}, position)
+        repeated = self.strategy.should_add_dca(candle, {}, position)
+
+        assert first is not None
+        assert repeated is not None
+        assert first.metadata["dca_level"] == 1
+        assert repeated.metadata["dca_level"] == 1
 
 
 class TestDCAConfig:

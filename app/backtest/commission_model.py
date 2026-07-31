@@ -13,7 +13,7 @@ class CommissionConfig:
 class CommissionModel:
     """Calculates trading commissions."""
 
-    def __init__(self, config: CommissionConfig = None):
+    def __init__(self, config: CommissionConfig | None = None) -> None:
         self.config = config or CommissionConfig()
 
     def calculate_commission(

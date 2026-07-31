@@ -138,34 +138,9 @@ class RiskEngine:
                 RiskEvent.INVALID_TRADE,
                 RiskLevel.CRITICAL,
             )
-        if self.is_emergency_stop:
-            reject("Emergency stop is active", RiskEvent.EMERGENCY_STOP, RiskLevel.CRITICAL)
-        if not (self.database_available if database_available is None else database_available):
-            reject("PostgreSQL is unavailable", RiskEvent.DATABASE_UNAVAILABLE, RiskLevel.CRITICAL)
-        if not (self.api_available if api_available is None else api_available):
-            reject("Exchange API is unavailable", RiskEvent.API_UNAVAILABLE, RiskLevel.CRITICAL)
-        if not (self.reconciliation_ok if reconciliation_ok is None else reconciliation_ok):
-            reject(
-                "Latest reconciliation did not succeed",
-                RiskEvent.RECONCILIATION_FAILED,
-                RiskLevel.CRITICAL,
-            )
-        unknown = sorted(
-            {s for s in (order_statuses or []) if s.lower() not in KNOWN_ORDER_STATUSES}
-        )
-        if unknown:
-            reject(
-                f"Unknown order status: {', '.join(unknown)}",
-                RiskEvent.UNKNOWN_ORDER_STATUS,
-                RiskLevel.CRITICAL,
-            )
-        if self.last_data_time:
-            timestamp = self.last_data_time
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-            age = (datetime.now(UTC) - timestamp).total_seconds() / 60
-            if age > self.config.stale_data_threshold_minutes:
-                reject(f"Data is stale: {age:.1f} minutes old", RiskEvent.STALE_DATA)
+            result = RiskCheckResult(False, risk_level, reasons, events)
+            self._persist_events(symbol, side, quantity, price, result)
+            return result
 
         order_value = quantity * price
         symbol_positions = [p for p in current_positions.values() if p.get("symbol") == symbol]
@@ -175,8 +150,43 @@ class RiskEngine:
         exposure_increase = max(abs(after) - abs(before), Decimal("0"))
         reducing = exposure_increase == 0
 
+        # Operational uncertainty blocks new exposure, but must not trap an
+        # existing spot position. Risk-reducing sells remain available.
+        if not reducing and self.is_emergency_stop:
+            reject("Emergency stop is active", RiskEvent.EMERGENCY_STOP, RiskLevel.CRITICAL)
+        if not reducing and not (
+            self.database_available if database_available is None else database_available
+        ):
+            reject("PostgreSQL is unavailable", RiskEvent.DATABASE_UNAVAILABLE, RiskLevel.CRITICAL)
+        if not reducing and not (self.api_available if api_available is None else api_available):
+            reject("Exchange API is unavailable", RiskEvent.API_UNAVAILABLE, RiskLevel.CRITICAL)
+        if not reducing and not (
+            self.reconciliation_ok if reconciliation_ok is None else reconciliation_ok
+        ):
+            reject(
+                "Latest reconciliation did not succeed",
+                RiskEvent.RECONCILIATION_FAILED,
+                RiskLevel.CRITICAL,
+            )
+        unknown = sorted(
+            {s for s in (order_statuses or []) if s.lower() not in KNOWN_ORDER_STATUSES}
+        )
+        if not reducing and unknown:
+            reject(
+                f"Unknown order status: {', '.join(unknown)}",
+                RiskEvent.UNKNOWN_ORDER_STATUS,
+                RiskLevel.CRITICAL,
+            )
+        if not reducing and self.last_data_time:
+            timestamp = self.last_data_time
+            if timestamp.tzinfo is None:
+                timestamp = timestamp.replace(tzinfo=UTC)
+            age = (datetime.now(UTC) - timestamp).total_seconds() / 60
+            if age > self.config.stale_data_threshold_minutes:
+                reject(f"Data is stale: {age:.1f} minutes old", RiskEvent.STALE_DATA)
+
         if not reducing:
-            position_pct = exposure_increase / total_capital
+            position_pct = abs(after) / total_capital
             if position_pct > self.config.max_position_size:
                 reject(
                     f"Position size {position_pct:.2%} exceeds limit "
@@ -221,17 +231,20 @@ class RiskEngine:
                 RiskEvent.MAX_CAPITAL_UTILIZATION,
             )
         if (
-            self.daily_pnl < 0
+            not reducing
+            and self.daily_pnl < 0
             and abs(self.daily_pnl) / total_capital > self.config.daily_loss_limit
         ):
             reject("Daily loss limit exceeded", RiskEvent.DAILY_LOSS_LIMIT, RiskLevel.CRITICAL)
         if (
-            self.weekly_pnl < 0
+            not reducing
+            and self.weekly_pnl < 0
             and abs(self.weekly_pnl) / total_capital > self.config.weekly_loss_limit
         ):
             reject("Weekly loss limit exceeded", RiskEvent.WEEKLY_LOSS_LIMIT, RiskLevel.CRITICAL)
         if (
-            self.peak_equity > 0
+            not reducing
+            and self.peak_equity > 0
             and (self.peak_equity - self.current_equity) / self.peak_equity
             > self.config.max_drawdown
         ):
@@ -249,8 +262,13 @@ class RiskEngine:
 
         adjusted_quantity = None
         if RiskEvent.MAX_POSITION_SIZE in events:
-            adjusted_quantity = total_capital * self.config.max_position_size / price
-            reasons.append(f"Adjusted quantity to {adjusted_quantity}")
+            available_position_value = max(
+                total_capital * self.config.max_position_size - abs(before),
+                Decimal("0"),
+            )
+            if available_position_value > 0:
+                adjusted_quantity = available_position_value / price
+                reasons.append(f"Adjusted quantity to {adjusted_quantity}")
         result = RiskCheckResult(not reasons, risk_level, reasons, events, adjusted_quantity)
         if events:
             self._persist_events(symbol, side, quantity, price, result)
