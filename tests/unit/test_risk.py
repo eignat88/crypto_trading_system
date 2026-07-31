@@ -37,6 +37,49 @@ class TestRiskEngine:
         assert result.approved is False
         assert RiskEvent.MAX_POSITION_SIZE in result.events
 
+    def test_dca_limit_uses_total_position_and_returns_only_remaining_quantity(self):
+        result = self.engine.check_trade(
+            symbol="BTCUSDT",
+            side="buy",
+            quantity=Decimal("0.3"),
+            price=Decimal("1000"),
+            current_balance=Decimal("4550"),
+            current_positions={
+                "BTCUSDT": {
+                    "symbol": "BTCUSDT",
+                    "side": "long",
+                    "value": Decimal("450"),
+                }
+            },
+            total_capital=self.total_capital,
+        )
+
+        assert result.approved is False
+        assert RiskEvent.MAX_POSITION_SIZE in result.events
+        assert result.adjusted_quantity == Decimal("0.05")
+
+    def test_emergency_stop_allows_risk_reducing_spot_exit(self):
+        self.engine.set_emergency_stop(True, "test")
+
+        result = self.engine.check_trade(
+            symbol="BTCUSDT",
+            side="sell",
+            quantity=Decimal("0.5"),
+            price=Decimal("1000"),
+            current_balance=Decimal("4500"),
+            current_positions={
+                "BTCUSDT": {
+                    "symbol": "BTCUSDT",
+                    "side": "long",
+                    "value": Decimal("500"),
+                }
+            },
+            total_capital=self.total_capital,
+        )
+
+        assert result.approved is True
+        assert result.events == []
+
     def test_asset_exposure_exceeded(self):
         # Open multiple positions in same asset
         positions = {
