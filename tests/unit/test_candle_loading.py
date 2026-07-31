@@ -97,6 +97,84 @@ def test_interval_duration_and_start_alignment() -> None:
     assert align_to_interval(unaligned, timedelta(minutes=5)) == START + timedelta(minutes=5)
 
 
+@pytest.mark.parametrize(
+    ("interval", "duration"),
+    [
+        ("5m", timedelta(minutes=5)),
+        ("15m", timedelta(minutes=15)),
+        ("1h", timedelta(hours=1)),
+        ("4h", timedelta(hours=4)),
+        ("1d", timedelta(days=1)),
+    ],
+)
+@async_test
+async def test_bybit_sets_close_time_for_every_supported_interval(
+    interval: str,
+    duration: timedelta,
+) -> None:
+    raw_row = [str(int(START.timestamp() * 1000)), "1", "2", "1", "2", "3", "6"]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"retCode": 0, "result": {"list": [raw_row]}},
+            request=request,
+        )
+
+    client = BybitClient()
+    await client.client.aclose()
+    client.client = httpx.AsyncClient(
+        base_url=client.BASE_URL, transport=httpx.MockTransport(handler)
+    )
+    try:
+        batch = await client.get_candles(
+            "BTCUSDT", interval, START, START + duration, limit=1
+        )
+    finally:
+        await client.close()
+
+    assert len(batch) == 1
+    assert batch[0].open_time == START
+    assert batch[0].close_time == START + duration
+    assert batch[0].close_time.tzinfo is UTC
+
+
+@async_test
+async def test_api_candle_persists_close_time_for_raw_to_dds_boundary() -> None:
+    duration = timedelta(hours=1)
+    raw_row = [str(int(START.timestamp() * 1000)), "1", "2", "1", "2", "3", "6"]
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"Traceid": "pilot-trace"},
+            json={"retCode": 0, "result": {"list": [raw_row]}},
+            request=request,
+        )
+
+    client = BybitClient()
+    await client.client.aclose()
+    client.client = httpx.AsyncClient(
+        base_url=client.BASE_URL, transport=httpx.MockTransport(handler)
+    )
+    session = Session()
+    try:
+        batch = await client.get_candles("BTCUSDT", "1h", START, START + duration, limit=1)
+        inserted = await CandleCollector(client)._store_candles(session, batch)
+    finally:
+        await client.close()
+
+    assert inserted == 1
+    _, params = session.calls[0]
+    assert params is not None
+    assert params["open_time"] == START
+    assert params["close_time"] == START + duration
+    as_of_before_close = START + timedelta(minutes=59, seconds=59)
+    as_of_at_close = START + duration
+    assert params["close_time"] > as_of_before_close
+    assert params["close_time"] <= as_of_at_close
+
+
 @pytest.mark.parametrize("offsets", [[0, 0], [0, 10]])
 def test_batch_validation_rejects_duplicates_and_gaps(offsets: list[int]) -> None:
     candles = [candle(START + timedelta(minutes=offset)) for offset in offsets]

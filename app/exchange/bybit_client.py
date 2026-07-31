@@ -20,6 +20,7 @@ from app.exchange.exceptions import (
     ExchangeTimeoutError,
     UnknownOrderStateError,
 )
+from app.exchange.intervals import interval_duration
 
 logger = structlog.get_logger()
 
@@ -184,6 +185,7 @@ class BybitClient(BaseExchange):
         end_time: datetime,
         limit: int = 1000,
     ) -> list[Candle]:
+        duration = interval_duration(interval)
         params = {
             "category": "spot",
             "symbol": symbol,
@@ -193,24 +195,26 @@ class BybitClient(BaseExchange):
             "limit": min(limit, 1000),
         }
         response, payload, request_time = await self._get_raw("/v5/market/kline", params)
-        candles = [
-            Candle(
-                "bybit",
-                symbol,
-                interval,
-                datetime.fromtimestamp(int(i[0]) / 1000, tz=UTC),
-                None,
-                Decimal(i[1]),
-                Decimal(i[2]),
-                Decimal(i[3]),
-                Decimal(i[4]),
-                Decimal(i[5]),
-                Decimal(i[6]) if i[6] else None,
-                None,
-                i,
+        candles: list[Candle] = []
+        for item in payload.get("result", {}).get("list", []):
+            open_time = datetime.fromtimestamp(int(item[0]) / 1000, tz=UTC)
+            candles.append(
+                Candle(
+                    "bybit",
+                    symbol,
+                    interval,
+                    open_time,
+                    open_time + duration,
+                    Decimal(item[1]),
+                    Decimal(item[2]),
+                    Decimal(item[3]),
+                    Decimal(item[4]),
+                    Decimal(item[5]),
+                    Decimal(item[6]) if item[6] else None,
+                    None,
+                    item,
+                )
             )
-            for i in payload.get("result", {}).get("list", [])
-        ]
         candles.sort(key=lambda candle: candle.open_time)
         return CandleBatch(
             candles,

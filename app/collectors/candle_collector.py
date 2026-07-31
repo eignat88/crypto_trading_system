@@ -8,24 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database.connection import async_session_factory
 from app.exchange.base_exchange import BaseExchange, Candle
+from app.exchange.intervals import interval_duration
 
 logger = structlog.get_logger()
-
-INTERVAL_DURATIONS = {
-    "5m": timedelta(minutes=5),
-    "15m": timedelta(minutes=15),
-    "1h": timedelta(hours=1),
-    "4h": timedelta(hours=4),
-    "1d": timedelta(days=1),
-}
-
-
-def interval_duration(interval: str) -> timedelta:
-    """Return the exact duration used to advance a kline checkpoint."""
-    try:
-        return INTERVAL_DURATIONS[interval]
-    except KeyError as exc:
-        raise ValueError(f"Unsupported candle interval: {interval}") from exc
 
 
 def align_to_interval(value: datetime, duration: timedelta) -> datetime:
