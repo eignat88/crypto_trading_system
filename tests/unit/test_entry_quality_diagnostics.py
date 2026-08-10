@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 
@@ -53,13 +53,9 @@ def test_reconstructs_trend_down_loss_entry_quality_and_age():
         _fill(side="sell", qty="1", price="108", fee="0.108", fill_hour=13,
               signal=_signal(exit_signal_time, price="109", reason="Regime changed to TREND_DOWN", regime="TREND_DOWN")),
     ]
-
-    records = reconstruct_entry_quality(
+    item = reconstruct_entry_quality(
         run_id=uuid4(), symbol="BTCUSDT", fill_rows=fills, candle_rows=candles
-    )
-
-    assert len(records) == 1
-    item = records[0]
+    )[0]
     assert item.outcome_group == "TREND_DOWN_LOSS"
     assert item.trend_up_age_bars == 10
     assert item.trend_up_age_censored is False
@@ -71,7 +67,7 @@ def test_reconstructs_trend_down_loss_entry_quality_and_age():
     assert item.close_to_ema200 > 0
 
 
-def test_classifies_tp_and_trailing_as_winners():
+def test_classifies_profitable_tp_and_trailing_as_winners():
     candles = _candles(["TREND_UP"] * 15)
     fills = [
         _fill(side="buy", qty="1", price="105", fee="0.105", fill_hour=5,
@@ -83,12 +79,26 @@ def test_classifies_tp_and_trailing_as_winners():
         _fill(side="sell", qty="1", price="114", fee="0.114", fill_hour=14,
               signal=_signal(datetime(2026, 1, 1, 13, tzinfo=UTC), price="113", reason="Trailing stop hit")),
     ]
-
     records = reconstruct_entry_quality(
         run_id=uuid4(), symbol="BTCUSDT", fill_rows=fills, candle_rows=candles
     )
     assert [r.outcome_group for r in records] == ["WINNER", "WINNER"]
     assert all(r.trend_down_before_exit is False for r in records)
+
+
+def test_losing_trailing_trade_is_not_in_winner_control_group():
+    candles = _candles(["TREND_UP"] * 12)
+    fills = [
+        _fill(side="buy", qty="1", price="105", fee="0.105", fill_hour=5,
+              signal=_signal(datetime(2026, 1, 1, 4, tzinfo=UTC), price="104")),
+        _fill(side="sell", qty="1", price="104", fee="0.104", fill_hour=8,
+              signal=_signal(datetime(2026, 1, 1, 7, tzinfo=UTC), price="104", reason="Trailing stop hit")),
+    ]
+    item = reconstruct_entry_quality(
+        run_id=uuid4(), symbol="ETHUSDT", fill_rows=fills, candle_rows=candles
+    )[0]
+    assert item.realized_pnl < 0
+    assert item.outcome_group == "OTHER"
 
 
 def test_marks_age_censored_at_start_of_available_history():
