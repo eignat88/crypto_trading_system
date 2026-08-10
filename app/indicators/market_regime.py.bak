@@ -3,7 +3,7 @@ from decimal import Decimal
 from enum import StrEnum
 
 from app.indicators.atr import calculate_atr, calculate_atr_percentage
-from app.indicators.ema import calculate_ema_series, calculate_ema_slope
+from app.indicators.ema import calculate_ema, calculate_ema_slope
 from app.indicators.volatility import calculate_historical_volatility, calculate_volatility_regime
 
 
@@ -68,15 +68,10 @@ class MarketRegimeDetector:
         """
         reasons = []
 
-        # Calculate current EMA values from the complete causal EMA series.
-        # The input contains only candles available up to the current moment.
-        ema_20_series = calculate_ema_series(closes, self.ema_short_period)
-        ema_50_series = calculate_ema_series(closes, self.ema_medium_period)
-        ema_200_series = calculate_ema_series(closes, self.ema_long_period)
-
-        ema_20 = ema_20_series[-1] if ema_20_series else None
-        ema_50 = ema_50_series[-1] if ema_50_series else None
-        ema_200 = ema_200_series[-1] if ema_200_series else None
+        # Calculate EMAs
+        ema_20 = calculate_ema(closes, self.ema_short_period)
+        ema_50 = calculate_ema(closes, self.ema_medium_period)
+        ema_200 = calculate_ema(closes, self.ema_long_period)
 
         # Calculate ATR and volatility
         atr = calculate_atr(highs, lows, closes, self.atr_period)
@@ -211,3 +206,12 @@ class MarketRegimeDetector:
             atr_percentage=atr_percentage,
             volatility=volatility,
         )
+
+
+def calculate_ema_series(
+    prices: list[Decimal],
+    period: int,
+) -> list[Decimal | None]:
+    """Calculate EMA series (helper function)."""
+    from app.indicators.ema import calculate_ema_series as _calculate_ema_series
+    return _calculate_ema_series(prices, period)

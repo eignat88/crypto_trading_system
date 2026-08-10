@@ -254,14 +254,9 @@ class IndicatorCollector:
                 )
                 ON CONFLICT (candle_id)
                 DO UPDATE SET
-                    regime = EXCLUDED.regime,
-                    confidence = EXCLUDED.confidence,
-                    reasons = EXCLUDED.reasons,
-                    ema_20 = EXCLUDED.ema_20,
-                    ema_50 = EXCLUDED.ema_50,
-                    ema_200 = EXCLUDED.ema_200,
-                    atr_percentage = EXCLUDED.atr_percentage,
-                    volatility = EXCLUDED.volatility,
+                    regime = :regime,
+                    confidence = :confidence,
+                    reasons = :reasons,
                     calculated_at = now()
                 """
             ),
