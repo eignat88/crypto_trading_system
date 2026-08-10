@@ -58,7 +58,7 @@ class BacktestResult:
 
 
 class BacktestEngine:
-    """Run Candle → Strategy → Risk → Order → Fill → Portfolio."""
+    """Run Candle -> Strategy -> Risk -> Order -> Fill -> Portfolio."""
 
     def __init__(
         self,
@@ -86,14 +86,20 @@ class BacktestEngine:
         initial_state: dict[str, Any] | None = None,
         indicator_provider: IndicatorProvider | None = None,
     ) -> BacktestResult:
-        """Run a reproducible backtest.
+        """Run a reproducible causal backtest.
 
-        A ``BaseStrategy`` receives indicators either from ``indicator_provider``
-        or from each candle's ``indicators`` mapping. Legacy callable strategies
-        remain supported for compatibility.
+        Strategy signals are evaluated after candle N and are queued. Market
+        execution happens only at candle N+1 open, where Risk Engine is checked
+        immediately before simulated fill. A signal produced on the final candle
+        therefore remains in the audit without an order/fill.
+
+        Engine-owned intrabar SL/TP exits are different: they are generated from
+        the current candle OHLC and execute from their deterministic reference
+        level (with conservative ambiguity rules in ``Portfolio``).
         """
         state = initial_state or {}
         peak_equity = self.config.initial_balance
+        pending_signals: list[Signal] = []
 
         logger.info(
             "backtest_started",
@@ -109,6 +115,22 @@ class BacktestEngine:
             high_price = self._decimal(candle.get("high", current_price), "high")
             low_price = self._decimal(candle.get("low", current_price), "low")
 
+            # Signals generated from the previous candle may only execute now,
+            # at this candle's open. This removes same-bar lookahead.
+            signals_to_execute = pending_signals
+            pending_signals = []
+            for pending_signal in signals_to_execute:
+                fill = self._execute_pending_signal(
+                    pending_signal,
+                    open_price=open_price,
+                    execution_time=timestamp,
+                )
+                if fill is not None and isinstance(strategy, BaseStrategy):
+                    strategy.on_fill(pending_signal, fill)
+
+            # Once the next-open execution has happened, attached fixed SL/TP
+            # levels are eligible during this candle. For long spot positions,
+            # Portfolio resolves OHLC ambiguity conservatively (stop first).
             closed_by_level = False
             level_events = self.portfolio.check_intrabar_exits(
                 {
@@ -155,20 +177,19 @@ class BacktestEngine:
                 if closed_by_level
                 else self._strategy_signals(strategy, candle, indicators, state)
             )
-            for signal in self._as_signal_list(signals, candle, timestamp):
-                fill = self._process_signal(signal, candle, timestamp)
-                if (
-                    fill is not None
-                    and isinstance(strategy, BaseStrategy)
-                    and isinstance(signal, Signal)
-                ):
-                    strategy.on_fill(signal, fill)
+            for raw_signal in self._as_signal_list(signals, candle, timestamp):
+                normalized = self._normalize_signal(raw_signal, candle, timestamp)
+                self.signals.append(normalized)
+                pending_signals.append(normalized)
 
             current_equity = self.portfolio.total_equity
             peak_equity = max(peak_equity, current_equity)
             drawdown = (peak_equity - current_equity) / peak_equity
             self.portfolio.max_drawdown = max(self.portfolio.max_drawdown, drawdown)
 
+        # Do not execute pending strategy signals from the final candle: there
+        # is no N+1 open. Any existing position is liquidated explicitly by the
+        # engine at the final close so the result has no hidden open exposure.
         if candles:
             last_candle = candles[-1]
             last_price = self._decimal(last_candle["close"], "close")
@@ -241,20 +262,50 @@ class BacktestEngine:
         should_add_dca = getattr(strategy, "should_add_dca", None)
         return should_add_dca(candle, indicators, position_state) if should_add_dca else None
 
+    def _execute_pending_signal(
+        self,
+        signal: Signal,
+        open_price: Decimal,
+        execution_time: datetime,
+    ) -> Fill | None:
+        """Execute an already-audited strategy signal at the next bar open."""
+        return self._create_and_execute_order(
+            signal,
+            requested_price=open_price,
+            timestamp=execution_time,
+        )
+
     def _process_signal(
         self,
         signal: Signal | dict[str, Any],
         candle: dict[str, Any],
         timestamp: datetime,
     ) -> Fill | None:
+        """Execute an immediate engine-owned signal.
+
+        This is intentionally retained for deterministic intrabar exits,
+        end-of-backtest liquidation, and direct unit-level compatibility. Normal
+        strategy signals in ``run`` do not use this method on their signal bar.
+        """
         normalized = self._normalize_signal(signal, candle, timestamp)
         self.signals.append(normalized)
+        return self._create_and_execute_order(
+            normalized,
+            requested_price=normalized.price,
+            timestamp=timestamp,
+        )
 
-        action = SignalAction(str(normalized.action))
+    def _create_and_execute_order(
+        self,
+        signal: Signal,
+        requested_price: Decimal,
+        timestamp: datetime,
+    ) -> Fill | None:
+        action = SignalAction(str(signal.action))
         side = "buy" if action in {SignalAction.BUY, SignalAction.OPEN_LONG} else "sell"
-        quantity = normalized.quantity
+        quantity = signal.quantity
         if side == "sell":
-            position = self.portfolio.get_position(normalized.symbol)
+            position = self.portfolio.get_position(signal.symbol)
             if position is None:
                 self.risk_decisions.append(
                     RiskDecision(
@@ -271,10 +322,10 @@ class BacktestEngine:
 
         order = Order(
             order_id=self._next_id("order"),
-            signal=normalized,
+            signal=signal,
             side=side,
             quantity=quantity,
-            requested_price=normalized.price,
+            requested_price=requested_price,
             created_at=timestamp,
         )
         self.orders.append(order)
@@ -286,6 +337,8 @@ class BacktestEngine:
             order.quantity,
             is_buy=order.side == "buy",
         )
+        # Risk is evaluated against the next-open execution candidate, directly
+        # before the fill. It never uses the previous candle close as market price.
         risk_result = self._check_risk(order, execution_price)
         approved_quantity = order.quantity
 
