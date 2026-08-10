@@ -20,11 +20,7 @@ FAILURE_WATCH_MAX_BARS = 24
 
 @dataclass
 class BreakoutRetestV2Config(BreakoutRetestConfig):
-    """Frozen Breakout Retest v2 configuration.
-
-    Entry and hard-exit settings remain inherited from v1. Only the explicit
-    failure-watch state-machine parameters are new.
-    """
+    """Frozen Breakout Retest v2 configuration."""
 
     parameters_version: str = PARAMETERS_VERSION_V2
     failure_detection_age_bars: int = FAILURE_DETECTION_AGE_BARS
@@ -89,14 +85,6 @@ class BreakoutRetestV2Strategy(BreakoutRetestStrategy):
             "failure_watch_resolution_time": None,
             "transition_events": [],
         }
-
-    @staticmethod
-    def _serialize_optional_time(value: Any) -> str | None:
-        if value is None:
-            return None
-        if not isinstance(value, datetime):
-            raise TypeError("timestamp must be datetime")
-        return value.isoformat()
 
     def _append_event(
         self,
@@ -222,10 +210,6 @@ class BreakoutRetestV2Strategy(BreakoutRetestStrategy):
         symbol = str(candle["symbol"])
         symbol_state = self._symbol_state(symbol)
 
-        # Engine-owned intrabar/end-of-backtest exits do not currently invoke
-        # strategy.on_fill. Reaching should_enter means Portfolio has already
-        # confirmed there is no position, so stale position-management state is
-        # safe to clear here, never before actual closure.
         if (
             not bool(portfolio_state.get("has_position", False))
             and symbol_state.get("position_state") is not None
@@ -246,15 +230,9 @@ class BreakoutRetestV2Strategy(BreakoutRetestStrategy):
             raise TypeError("candle.open_time must be datetime")
         symbol_state = self._symbol_state(symbol)
 
-        # Existing v1 hard exits own precedence. This also observes the candle
-        # exactly once for v1 resistance history.
         hard_exit = super().should_exit(candle, indicators, position)
         if hard_exit is not None:
-            self._mark_watch_hard_exit(
-                symbol_state,
-                signal=hard_exit,
-                timestamp=timestamp,
-            )
+            self._mark_watch_hard_exit(symbol_state, signal=hard_exit, timestamp=timestamp)
             return hard_exit
 
         if symbol_state.get("position_state") is None:
@@ -341,7 +319,6 @@ class BreakoutRetestV2Strategy(BreakoutRetestStrategy):
                 timestamp=timestamp,
                 metadata={"failure_watch_bars": completed_watch_bars},
             )
-            self._clear_watch_fields(symbol_state)
             return None
 
         if int(symbol_state["failure_watch_bars"]) >= self.config.failure_watch_max_bars:
@@ -370,7 +347,6 @@ class BreakoutRetestV2Strategy(BreakoutRetestStrategy):
         indicators: dict[str, Any],
         position: dict[str, Any],
     ) -> Signal | None:
-        """DCA remains disabled in every v2 position-management state."""
         self._observe_candle(candle)
         return None
 
