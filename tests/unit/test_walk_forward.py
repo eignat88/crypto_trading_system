@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -60,9 +60,7 @@ def test_fixed_parameter_walk_forward_uses_only_complete_test_window():
     start = datetime(2026, 1, 1, tzinfo=UTC)
     config = WalkForwardConfig(train_days=1, test_days=1, step_days=1)
     end = datetime(2026, 1, 3, tzinfo=UTC)
-    candles = [_candle(start.replace(hour=0))]
-    for hour in range(1, 48):
-        candles.append(_candle(start + __import__("datetime").timedelta(hours=hour)))
+    candles = [_candle(start + timedelta(hours=hour)) for hour in range(48)]
 
     result = run_fixed_parameter_walk_forward(
         candles=candles,
@@ -88,7 +86,7 @@ def test_fixed_parameter_walk_forward_rejects_missing_test_candle():
     config = WalkForwardConfig(train_days=1, test_days=1, step_days=1)
     end = datetime(2026, 1, 3, tzinfo=UTC)
     test_start = datetime(2026, 1, 2, tzinfo=UTC)
-    candles = [_candle(test_start + __import__("datetime").timedelta(hours=hour)) for hour in range(23)]
+    candles = [_candle(test_start + timedelta(hours=hour)) for hour in range(23)]
 
     with pytest.raises(ValueError, match="Incomplete test window"):
         run_fixed_parameter_walk_forward(
