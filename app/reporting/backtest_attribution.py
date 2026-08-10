@@ -12,6 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.database.connection import async_session_factory
 
 
+QUANTITY_RECONCILIATION_TOLERANCE = Decimal("1E-17")
+
+
 @dataclass(frozen=True)
 class ClosedTrade:
     symbol: str
@@ -82,7 +85,13 @@ def _utc(value: datetime) -> datetime:
 
 
 def reconstruct_closed_trades(rows: list[dict[str, Any]]) -> list[ClosedTrade]:
-    """Reconstruct spot long position lifecycles from ordered fill/order audit rows."""
+    """Reconstruct spot long position lifecycles from ordered fill/order audit rows.
+
+    Persisted fill quantities use NUMERIC(38, 18), while the in-memory backtest
+    can carry more Decimal precision. A tiny absolute tolerance is therefore
+    allowed only when reconciling a full closing sell against the accumulated
+    persisted buy quantity. Material partial/oversized sells still fail closed.
+    """
     position: _OpenPosition | None = None
     trades: list[ClosedTrade] = []
 
@@ -121,10 +130,12 @@ def reconstruct_closed_trades(rows: list[dict[str, Any]]) -> list[ClosedTrade]:
             raise ValueError(f"Unsupported fill side: {side}")
         if position is None:
             raise ValueError("Sell fill without an open spot position")
-        if quantity != position.quantity:
+
+        quantity_delta = abs(quantity - position.quantity)
+        if quantity_delta > QUANTITY_RECONCILIATION_TOLERANCE:
             raise ValueError(
-                f"Partial/oversized sell is not supported by current backtest attribution: "
-                f"sell={quantity} position={position.quantity}"
+                "Partial/oversized sell is not supported by current backtest attribution: "
+                f"sell={quantity} position={position.quantity} delta={quantity_delta}"
             )
 
         pnl = (
