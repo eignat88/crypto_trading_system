@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from typing import Any
 
@@ -43,10 +44,12 @@ class TrendDCAEMA200SlopeP75Strategy(TrendDCAStrategy):
         if signal is None:
             return None
 
-        signal.metadata = {
-            **signal.metadata,
-            "ema200_slope_10": str(slope_value),
-            "ema200_slope_threshold": str(self.ema200_slope_threshold),
-            "threshold_source": "TRAIN_ENTRY_OPPORTUNITY_P75",
-        }
-        return signal
+        return replace(
+            signal,
+            metadata={
+                **signal.metadata,
+                "ema200_slope_10": str(slope_value),
+                "ema200_slope_threshold": str(self.ema200_slope_threshold),
+                "threshold_source": "TRAIN_ENTRY_OPPORTUNITY_P75",
+            },
+        )
