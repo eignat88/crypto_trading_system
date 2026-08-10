@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from app.reporting.trend_down_diagnostics import build_trend_down_diagnostics
+from app.reporting.trend_down_diagnostics_query import build_trend_down_diagnostics
 
 
 def _json_default(value: Any) -> str:
@@ -29,9 +29,7 @@ def _pct(count: int, total: int) -> Decimal:
 
 
 def _fmt(value: Any) -> str:
-    if value is None:
-        return ""
-    return str(value)
+    return "" if value is None else str(value)
 
 
 async def main() -> None:
@@ -152,7 +150,9 @@ async def main() -> None:
         writer.writeheader()
         for report in reports:
             for record in report.records:
-                writer.writerow({key: _json_default(value) for key, value in asdict(record).items()})
+                writer.writerow(
+                    {key: _json_default(value) for key, value in asdict(record).items()}
+                )
 
     print(f"json_artifact                  : {json_file}")
     print(f"csv_artifact                   : {csv_file}")
