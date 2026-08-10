@@ -76,3 +76,6 @@ credentials/
 # CI logs
 logs/ci/
 logs/readiness_*
+
+# Local backtest artifacts
+artifacts/backtests/
