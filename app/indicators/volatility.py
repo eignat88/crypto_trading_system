@@ -2,21 +2,46 @@ import math
 from decimal import Decimal
 
 
+def _periods_per_year(timeframe: str) -> float:
+    """Return the number of candles per crypto year for a timeframe code."""
+    if not timeframe or len(timeframe) < 2:
+        raise ValueError(f"Unsupported timeframe: {timeframe!r}")
+
+    unit = timeframe[-1].lower()
+    try:
+        value = int(timeframe[:-1])
+    except ValueError as exc:
+        raise ValueError(f"Unsupported timeframe: {timeframe!r}") from exc
+
+    if value <= 0:
+        raise ValueError("timeframe value must be positive")
+
+    if unit == "m":
+        return 365.0 * 24.0 * 60.0 / value
+    if unit == "h":
+        return 365.0 * 24.0 / value
+    if unit == "d":
+        return 365.0 / value
+    if unit == "w":
+        return 365.0 / (7.0 * value)
+
+    raise ValueError(f"Unsupported timeframe: {timeframe!r}")
+
+
+def _annualization_factor(timeframe: str) -> Decimal:
+    return Decimal(str(math.sqrt(_periods_per_year(timeframe))))
+
+
 def calculate_historical_volatility(
     closes: list[Decimal],
     period: int = 20,
     annualize: bool = True,
+    timeframe: str = "1h",
 ) -> Decimal | None:
-    """
-    Calculate Historical Volatility.
+    """Calculate causal historical volatility from log returns.
 
-    Args:
-        closes: List of closing prices (oldest first)
-        period: Period for calculation (default: 20)
-        annualize: If True, annualize the volatility
-
-    Returns:
-        Historical volatility as decimal (e.g., 0.5 for 50%) or None
+    ``timeframe`` controls annualization. For example, 1h crypto candles use
+    ``sqrt(365 * 24)`` while 1d candles use ``sqrt(365)``.
     """
     if len(closes) < period + 1:
         return None
@@ -39,12 +64,14 @@ def calculate_historical_volatility(
         return Decimal("0")
 
     mean_return = sum(recent_returns) / len(recent_returns)
-    variance = sum((r - mean_return) ** 2 for r in recent_returns) / (len(recent_returns) - 1)
+    variance = sum((r - mean_return) ** 2 for r in recent_returns) / (
+        len(recent_returns) - 1
+    )
     std_dev = math.sqrt(variance)
 
     volatility = Decimal(str(std_dev))
     if annualize:
-        volatility = volatility * Decimal(str(math.sqrt(365)))
+        volatility *= _annualization_factor(timeframe)
 
     return volatility
 
@@ -53,12 +80,13 @@ def calculate_historical_volatility_series(
     closes: list[Decimal],
     period: int = 20,
     annualize: bool = True,
+    timeframe: str = "1h",
 ) -> list[Decimal | None]:
     """Calculate the causal historical-volatility value for every candle.
 
     Each output at index ``i`` is equivalent to calling
-    ``calculate_historical_volatility(closes[: i + 1], period, annualize)`` but
-    only the rolling ``period`` log returns are processed for that candle.
+    ``calculate_historical_volatility(closes[: i + 1], ...)`` while processing
+    only the rolling ``period`` log returns for that candle.
     """
     values: list[Decimal | None] = [None] * len(closes)
     if len(closes) < period + 1:
@@ -71,7 +99,7 @@ def calculate_historical_volatility_series(
         else:
             log_returns.append(None)
 
-    annualization_factor = Decimal(str(math.sqrt(365))) if annualize else Decimal(1)
+    annualization_factor = _annualization_factor(timeframe) if annualize else Decimal(1)
 
     for i in range(period, len(closes)):
         window = log_returns[i - period + 1 : i + 1]
