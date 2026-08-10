@@ -6,13 +6,23 @@ from decimal import Decimal
 from statistics import median
 from typing import Any
 
-from app.backtest.backtest_engine import BacktestResult
-from app.backtest.ema200_slope_p75_walk_forward import WindowThreshold
-from app.backtest.walk_forward import WalkForwardWindow
+from app.backtest.backtest_engine import BacktestConfig, BacktestEngine, BacktestResult
+from app.backtest.ema200_slope_p75_walk_forward import (
+    WindowThreshold,
+    add_ema200_slope_10,
+    derive_train_p75_threshold,
+)
+from app.backtest.walk_forward import (
+    WalkForwardConfig,
+    WalkForwardWindow,
+    generate_walk_forward_windows,
+)
+from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
 TD_REASON = "Regime changed to TREND_DOWN"
 WIN_REASONS = {"Take-profit hit", "Take profit hit", "Trailing stop hit"}
 QTY_TOLERANCE = Decimal("1E-17")
+PNL_TOLERANCE = Decimal("0.000000001")
 
 
 @dataclass(frozen=True)
@@ -76,6 +86,7 @@ class CounterfactualReport:
     filtered_other: int
     filtered_winner_features: FeatureSummary
     filtered_td_loss_features: FeatureSummary
+    thresholds: tuple[WindowThreshold, ...]
 
     @property
     def filtered_total(self) -> int:
@@ -147,11 +158,7 @@ def reconstruct_window_counterfactual(
     backtest: BacktestResult,
     all_candles: list[dict[str, Any]],
 ) -> list[CounterfactualTrade]:
-    """Classify baseline TEST trades against the frozen TRAIN p75 threshold.
-
-    The baseline trade outcome is never recomputed. ``would_pass_p75`` is only a
-    counterfactual label attached to the original baseline entry signal.
-    """
+    """Classify original baseline TEST trades against frozen TRAIN p75."""
     by_time = {candle["open_time"]: index for index, candle in enumerate(all_candles)}
     signal_by_order_id = {order.order_id: order.signal for order in backtest.orders}
 
@@ -261,6 +268,11 @@ def reconstruct_window_counterfactual(
         raise ValueError(
             f"Trade count mismatch: reconstructed={len(records)} backtest={backtest.total_trades}"
         )
+    reconstructed_pnl = sum((record.realized_pnl for record in records), Decimal("0"))
+    if abs(reconstructed_pnl - backtest.total_pnl) > PNL_TOLERANCE:
+        raise ValueError(
+            f"PnL reconciliation failed: reconstructed={reconstructed_pnl} backtest={backtest.total_pnl}"
+        )
     return records
 
 
@@ -287,7 +299,11 @@ def summarize_features(records: list[CounterfactualTrade]) -> FeatureSummary:
 
 
 def summarize_counterfactual(
-    *, symbol: str, records: list[CounterfactualTrade], baseline_oos_pnl: Decimal
+    *,
+    symbol: str,
+    records: list[CounterfactualTrade],
+    baseline_oos_pnl: Decimal,
+    thresholds: tuple[WindowThreshold, ...] = (),
 ) -> CounterfactualReport:
     counts = {
         name: sum(record.filter_group == name for record in records)
@@ -311,4 +327,75 @@ def summarize_counterfactual(
         filtered_other=counts["FILTERED_OTHER"],
         filtered_winner_features=summarize_features(filtered_winners),
         filtered_td_loss_features=summarize_features(filtered_losses),
+        thresholds=thresholds,
+    )
+
+
+def run_entry_filter_counterfactual(
+    *,
+    candles: list[dict[str, Any]],
+    symbol: str,
+    interval: str,
+    start: datetime,
+    end: datetime,
+    config: WalkForwardConfig | None = None,
+) -> CounterfactualReport:
+    """Run baseline OOS windows and label each baseline trade against TRAIN p75."""
+    if interval != "1h":
+        raise ValueError("ENTRY FILTER COUNTERFACTUAL diagnostics supports only 1h")
+
+    wf_config = config or WalkForwardConfig()
+    enriched = add_ema200_slope_10(candles)
+    windows = generate_walk_forward_windows(start, end, wf_config)
+
+    all_records: list[CounterfactualTrade] = []
+    thresholds: list[WindowThreshold] = []
+    baseline_oos_pnl = Decimal("0")
+
+    for window in windows:
+        threshold_value, opportunity_count = derive_train_p75_threshold(enriched, window)
+        threshold = WindowThreshold(
+            window_index=window.index,
+            train_opportunities=opportunity_count,
+            threshold=threshold_value,
+        )
+        thresholds.append(threshold)
+
+        test_candles = [
+            candle
+            for candle in enriched
+            if window.test_start <= candle["open_time"] < window.test_end
+        ]
+        expected = int((window.test_end - window.test_start).total_seconds() / 3600)
+        if len(test_candles) != expected:
+            raise ValueError(
+                f"Incomplete test window {window.index}: expected={expected} actual={len(test_candles)}"
+            )
+
+        engine = BacktestEngine(
+            config=BacktestConfig(
+                initial_balance=wf_config.initial_balance,
+                random_seed=wf_config.random_seed,
+            )
+        )
+        baseline = engine.run(
+            candles=test_candles,
+            strategy=TrendDCAStrategy(symbols=[symbol], config=DCAConfig()),
+            indicator_provider=lambda candle, index: candle["indicators"],
+        )
+        window_records = reconstruct_window_counterfactual(
+            symbol=symbol,
+            window=window,
+            threshold=threshold,
+            backtest=baseline,
+            all_candles=enriched,
+        )
+        all_records.extend(window_records)
+        baseline_oos_pnl += baseline.total_pnl
+
+    return summarize_counterfactual(
+        symbol=symbol,
+        records=all_records,
+        baseline_oos_pnl=baseline_oos_pnl,
+        thresholds=tuple(thresholds),
     )
