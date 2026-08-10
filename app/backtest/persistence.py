@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -29,6 +29,24 @@ def _json_dumps(value: Any) -> str:
         ensure_ascii=False,
         default=_json_default,
     )
+
+
+def _as_utc_datetime(value: datetime | str) -> datetime:
+    """Normalize an ISO string or datetime to timezone-aware UTC."""
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(normalized)
+    else:
+        raise TypeError(f"Expected datetime or ISO string, got {type(value).__name__}")
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+
+    return parsed.astimezone(timezone.utc)
 
 
 def build_run_fingerprint(payload: dict[str, Any]) -> str:
@@ -152,7 +170,7 @@ async def persist_backtest_audit(
             "sequence_no": index,
             "action": item["action"],
             "symbol": item["symbol"],
-            "signal_time": item["timestamp"],
+            "signal_time": _as_utc_datetime(item["timestamp"]),
             "strategy_name": item.get("strategy", ""),
             "parameters_version": item.get("parameters_version", ""),
             "regime": item.get("regime"),
@@ -181,7 +199,7 @@ async def persist_backtest_audit(
             "order_id": item["order_id"],
             "symbol": item["signal"]["symbol"],
             "side": item["side"],
-            "created_at": item["created_at"],
+            "created_at": _as_utc_datetime(item["created_at"]),
             "payload": _json_dumps(item),
         }
         for index, item in enumerate(audit["orders"], start=1)
@@ -198,7 +216,7 @@ async def persist_backtest_audit(
             "quantity": item["quantity"],
             "price": item["price"],
             "commission": item["commission"],
-            "fill_time": item["timestamp"],
+            "fill_time": _as_utc_datetime(item["timestamp"]),
             "payload": _json_dumps(item),
         }
         for index, item in enumerate(audit["fills"], start=1)
@@ -207,13 +225,13 @@ async def persist_backtest_audit(
     run_values = {
         "run_id": run_id,
         "run_fingerprint": fingerprint,
-        "created_at": metadata["created_at"],
+        "created_at": _as_utc_datetime(metadata["created_at"]),
         "git_commit": metadata.get("git_commit"),
         "exchange_name": metadata["exchange"],
         "symbol": metadata["symbol"],
         "interval_code": metadata["interval"],
-        "period_start": metadata["start"],
-        "period_end": metadata["end"],
+        "period_start": _as_utc_datetime(metadata["start"]),
+        "period_end": _as_utc_datetime(metadata["end"]),
         "candle_count": metadata["candle_count"],
         "random_seed": metadata["random_seed"],
         "strategy_name": strategy["name"],
