@@ -8,6 +8,7 @@ from app.indicators.volatility import calculate_historical_volatility, calculate
 
 
 class MarketRegime(StrEnum):
+    UNKNOWN = "UNKNOWN"
     TREND_UP = "TREND_UP"
     TREND_DOWN = "TREND_DOWN"
     RANGE = "RANGE"
@@ -27,7 +28,7 @@ class RegimeResult:
 
 
 class MarketRegimeDetector:
-    """Detects current market regime based on indicators."""
+    """Detects the current market regime from causal indicator inputs."""
 
     def __init__(
         self,
@@ -54,22 +55,11 @@ class MarketRegimeDetector:
         closes: list[Decimal],
         highs: list[Decimal],
         lows: list[Decimal],
+        timeframe: str = "1h",
     ) -> RegimeResult:
-        """
-        Detect market regime based on price data.
+        """Detect the regime using only data available through the current candle."""
+        reasons: list[str] = []
 
-        Args:
-            closes: List of closing prices (oldest first)
-            highs: List of high prices
-            lows: List of low prices
-
-        Returns:
-            RegimeResult with detected regime and indicators
-        """
-        reasons = []
-
-        # Calculate current EMA values from the complete causal EMA series.
-        # The input contains only candles available up to the current moment.
         ema_20_series = calculate_ema_series(closes, self.ema_short_period)
         ema_50_series = calculate_ema_series(closes, self.ema_medium_period)
         ema_200_series = calculate_ema_series(closes, self.ema_long_period)
@@ -78,17 +68,19 @@ class MarketRegimeDetector:
         ema_50 = ema_50_series[-1] if ema_50_series else None
         ema_200 = ema_200_series[-1] if ema_200_series else None
 
-        # Calculate ATR and volatility
         atr = calculate_atr(highs, lows, closes, self.atr_period)
         current_price = closes[-1] if closes else None
 
         atr_percentage = None
-        if atr and current_price:
+        if atr is not None and current_price is not None and current_price != 0:
             atr_percentage = calculate_atr_percentage(atr, current_price)
 
-        volatility = calculate_historical_volatility(closes, self.volatility_period)
+        volatility = calculate_historical_volatility(
+            closes,
+            self.volatility_period,
+            timeframe=timeframe,
+        )
 
-        # Check for high volatility first (overrides other regimes)
         if volatility is not None:
             vol_regime = calculate_volatility_regime(
                 volatility, high_threshold=self.high_volatility_threshold
@@ -106,12 +98,11 @@ class MarketRegimeDetector:
                     volatility=volatility,
                 )
 
-        # Need at least EMA 200 for trend detection
         if ema_200 is None:
             reasons.append("Insufficient data for EMA 200")
             return RegimeResult(
-                regime=MarketRegime.RANGE,
-                confidence=Decimal("0.3"),
+                regime=MarketRegime.UNKNOWN,
+                confidence=Decimal("0"),
                 reasons=reasons,
                 ema_20=ema_20,
                 ema_50=ema_50,
@@ -120,33 +111,32 @@ class MarketRegimeDetector:
                 volatility=volatility,
             )
 
-        # Calculate EMA slope
-        ema_200_slope = calculate_ema_slope(
-            calculate_ema_series(closes, self.ema_long_period),
-            lookback=10,
-        )
+        ema_200_slope = calculate_ema_slope(ema_200_series, lookback=10)
+        if ema_200_slope is None:
+            reasons.append("Insufficient EMA 200 history for slope")
+            return RegimeResult(
+                regime=MarketRegime.UNKNOWN,
+                confidence=Decimal("0"),
+                reasons=reasons,
+                ema_20=ema_20,
+                ema_50=ema_50,
+                ema_200=ema_200,
+                atr_percentage=atr_percentage,
+                volatility=volatility,
+            )
 
-        # Check for TREND_UP
-        # Conditions:
-        # - close > EMA200
-        # - EMA50 > EMA200
-        # - EMA200 slope positive
         if (
             current_price is not None
             and ema_50 is not None
             and current_price > ema_200
             and ema_50 > ema_200
-            and ema_200_slope is not None
             and ema_200_slope > self.slope_threshold
         ):
             reasons.append(f"Price {current_price} > EMA200 {ema_200}")
             reasons.append(f"EMA50 {ema_50} > EMA200 {ema_200}")
             reasons.append(f"EMA200 slope {ema_200_slope:.4f} > threshold")
-
-            # Calculate confidence based on distance and slope
             distance = (current_price - ema_200) / ema_200
             confidence = min(Decimal("0.9"), Decimal("0.5") + distance * 10)
-
             return RegimeResult(
                 regime=MarketRegime.TREND_UP,
                 confidence=confidence,
@@ -158,27 +148,18 @@ class MarketRegimeDetector:
                 volatility=volatility,
             )
 
-        # Check for TREND_DOWN
-        # Conditions:
-        # - close < EMA200
-        # - EMA50 < EMA200
-        # - EMA200 slope negative
         if (
             current_price is not None
             and ema_50 is not None
             and current_price < ema_200
             and ema_50 < ema_200
-            and ema_200_slope is not None
             and ema_200_slope < -self.slope_threshold
         ):
             reasons.append(f"Price {current_price} < EMA200 {ema_200}")
             reasons.append(f"EMA50 {ema_50} < EMA200 {ema_200}")
             reasons.append(f"EMA200 slope {ema_200_slope:.4f} < threshold")
-
-            # Calculate confidence based on distance and slope
             distance = (ema_200 - current_price) / ema_200
             confidence = min(Decimal("0.9"), Decimal("0.5") + distance * 10)
-
             return RegimeResult(
                 regime=MarketRegime.TREND_DOWN,
                 confidence=confidence,
@@ -190,12 +171,9 @@ class MarketRegimeDetector:
                 volatility=volatility,
             )
 
-        # Default to RANGE
         reasons.append("No clear trend detected")
-        if ema_200_slope is not None:
-            reasons.append(f"EMA200 slope {ema_200_slope:.4f} near zero")
+        reasons.append(f"EMA200 slope {ema_200_slope:.4f} near zero")
 
-        # Check if EMAs are close together (range characteristic)
         if ema_50 is not None:
             ema_distance = abs(ema_50 - ema_200) / ema_200
             if ema_distance < self.range_distance_threshold:
