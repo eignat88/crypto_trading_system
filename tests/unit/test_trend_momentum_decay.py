@@ -82,23 +82,32 @@ def test_delta_is_entry_value_minus_exact_horizon_past_value():
 
 def test_summary_decay_rate_counts_negative_deltas():
     candles = _candles()
-    # Force EMA50 slope to weaken sharply before the winner entry while retaining
-    # a valid positive EMA series.
-    for i in range(35, 51):
-        candles[i]["indicators"]["ema_50"] = Decimal("200") - Decimal(i)
+    # Winner entry is index 50. For horizon=6, the past slope is evaluated at
+    # index 44. Make slope(44)=(130-100)/100=0.30 and
+    # slope(50)=(125-120)/120~=0.0417, so delta is strictly negative.
+    candles[35]["indicators"]["ema_50"] = Decimal("100")
+    candles[41]["indicators"]["ema_50"] = Decimal("120")
+    candles[44]["indicators"]["ema_50"] = Decimal("130")
+    candles[50]["indicators"]["ema_50"] = Decimal("125")
 
     report = build_trend_momentum_decay(
         candles=candles,
         counterfactual=_counterfactual(candles),
         horizons=(6,),
     )
-    winner = next(item for item in report.summaries if item.group == "FILTERED_WINNER")
+    winner_record = next(
+        item for item in report.records if item.filter_group == "FILTERED_WINNER"
+    )
+    winner_summary = next(
+        item for item in report.summaries if item.group == "FILTERED_WINNER"
+    )
 
-    assert winner.trades == 1
-    assert winner.average_pnl == Decimal("0.5")
-    assert winner.ema50_slope_delta is not None if hasattr(winner, "ema50_slope_delta") else True
-    assert winner.ema50_decay_count in (0, 1)
-    assert Decimal("0") <= winner.ema50_decay_rate <= Decimal("1")
+    assert winner_record.ema50_slope_delta is not None
+    assert winner_record.ema50_slope_delta < 0
+    assert winner_summary.trades == 1
+    assert winner_summary.average_pnl == Decimal("0.5")
+    assert winner_summary.ema50_decay_count == 1
+    assert winner_summary.ema50_decay_rate == Decimal("1")
 
 
 def test_rejects_non_positive_horizon():
