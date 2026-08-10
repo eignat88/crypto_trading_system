@@ -1,7 +1,9 @@
+from dataclasses import asdict
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.indicators.market_regime import MarketRegime
+from app.strategies.trend_dca import DCAConfig
 from app.strategies.trend_dca_confirm3 import (
     EXPERIMENT_PARAMETERS_VERSION,
     TrendDCAConfirm3Strategy,
@@ -91,3 +93,13 @@ def test_confirm3_has_explicit_experiment_version():
     strategy = TrendDCAConfirm3Strategy(symbols=["BTCUSDT"])
 
     assert strategy.config.parameters_version == "trend_dca_v1_trend_down_confirm3"
+
+
+def test_confirm3_keeps_all_baseline_parameters_except_version():
+    baseline = asdict(DCAConfig())
+    experiment = asdict(TrendDCAConfirm3Strategy(symbols=["BTCUSDT"]).config)
+
+    baseline.pop("parameters_version")
+    experiment.pop("parameters_version")
+
+    assert experiment == baseline
