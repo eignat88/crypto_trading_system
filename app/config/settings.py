@@ -14,23 +14,33 @@ class ExchangeName(StrEnum):
 
 
 class Settings(BaseSettings):
-    # Exchange
-    exchange_name: ExchangeName = ExchangeName.BYBIT
+    # Trading Mode
+    trading_mode: TradingMode = TradingMode.PAPER
+
+    # Bybit Configuration
+    bybit_environment: str = Field(default="demo", description="Bybit environment: demo, testnet, mainnet")
+    trading_symbols: str = Field(default="BTCUSDT-SPOT,ETHUSDT-SPOT", description="Trading symbols")
+
+    # Exchange API (for future live trading)
     exchange_api_key: str = Field(default="", description="Exchange API key")
     exchange_api_secret: str = Field(default="", description="Exchange API secret")
 
-    # Database
-    database_url: str = Field(
-        default="postgresql+asyncpg://user:password@localhost:5432/crypto_trading",
-        description="Async database URL",
-    )
-    database_url_sync: str = Field(
-        default="postgresql+psycopg2://user:password@localhost:5432/crypto_trading",
-        description="Sync database URL for migrations",
-    )
+    # PostgreSQL Configuration
+    postgres_host: str = Field(default="localhost", description="PostgreSQL host")
+    postgres_port: int = Field(default=5432, description="PostgreSQL port")
+    postgres_db: str = Field(default="crypto_trading", description="PostgreSQL database")
+    postgres_user: str = Field(default="postgres", description="PostgreSQL user")
+    postgres_password: str = Field(default="", description="PostgreSQL password")
 
-    # Trading Mode
-    trading_mode: TradingMode = TradingMode.PAPER
+    @property
+    def database_url(self) -> str:
+        """Async database URL for SQLAlchemy."""
+        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+
+    @property
+    def database_url_sync(self) -> str:
+        """Sync database URL for psycopg."""
+        return f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
 
     # Risk Limits
     max_risk_per_trade: float = Field(default=0.005, ge=0.0, le=1.0)
