@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -51,11 +51,10 @@ class TrendPullbackConfirmationStrategy(TrendDCAStrategy):
             }
 
     def _symbol_state(self, symbol: str) -> dict[str, Any]:
-        state = self.state.setdefault(
+        return self.state.setdefault(
             symbol,
             {"phase": "IDLE", "previous_rsi": None, "setup": None},
         )
-        return state
 
     @staticmethod
     def _serialize_decimal(value: Decimal) -> str:
@@ -65,7 +64,8 @@ class TrendPullbackConfirmationStrategy(TrendDCAStrategy):
     def _serialize_time(value: datetime) -> str:
         return value.isoformat()
 
-    def _clear_setup(self, symbol_state: dict[str, Any]) -> None:
+    @staticmethod
+    def _clear_setup(symbol_state: dict[str, Any]) -> None:
         symbol_state["phase"] = "IDLE"
         symbol_state["setup"] = None
 
@@ -93,6 +93,55 @@ class TrendPullbackConfirmationStrategy(TrendDCAStrategy):
             "bars_since_setup": 0,
         }
 
+    def _build_confirmed_signal(
+        self,
+        *,
+        symbol: str,
+        timestamp: datetime,
+        close: Decimal,
+        ema20: Decimal,
+        ema50: Decimal,
+        ema200: Decimal,
+        rsi: Decimal,
+        regime: Any,
+        indicators: dict[str, Any],
+        portfolio_state: dict[str, Any],
+        setup: dict[str, Any],
+    ) -> Signal:
+        capital = Decimal(str(portfolio_state.get("capital", "0")))
+        max_position_value = capital * self.config.max_capital_per_position
+        base_order_value = max_position_value * self.config.base_order_pct
+        quantity = base_order_value / close
+        stop_loss = close * (Decimal("1") - self.config.stop_loss_pct)
+        take_profit = close * (Decimal("1") + self.config.take_profit_pct)
+
+        return Signal(
+            action="open_long",
+            symbol=symbol,
+            price=close,
+            quantity=quantity,
+            timestamp=timestamp,
+            reason="Trend pullback recovery confirmed",
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            strategy=self.name,
+            parameters_version=self.config.parameters_version,
+            regime=str(regime),
+            indicators=indicators,
+            metadata={
+                "dca_level": 0,
+                "setup_time": setup["setup_time"],
+                "confirmation_time": self._serialize_time(timestamp),
+                "setup_rsi": setup["setup_rsi"],
+                "confirmation_rsi": str(rsi),
+                "bars_since_setup": int(setup["bars_since_setup"]),
+                "confirmation_close": str(close),
+                "confirmation_ema20": str(ema20),
+                "confirmation_ema50": str(ema50),
+                "confirmation_ema200": str(ema200),
+            },
+        )
+
     def should_enter(
         self,
         candle: dict[str, Any],
@@ -118,12 +167,15 @@ class TrendPullbackConfirmationStrategy(TrendDCAStrategy):
         regime = indicators.get("regime")
         volatility_raw = indicators.get("volatility")
 
-        # Preserve previous-RSI chronology even if another required indicator is
-        # unavailable. Missing data never creates an entry signal.
+        # Previous RSI is part of serializable strategy state. Updating it uses
+        # only the just-closed current candle and cannot create a signal itself.
         if rsi_raw is not None:
             symbol_state["previous_rsi"] = str(Decimal(str(rsi_raw)))
 
-        if any(value is None for value in (ema20_raw, ema50_raw, ema200_raw, rsi_raw, regime)):
+        if any(
+            value is None
+            for value in (ema20_raw, ema50_raw, ema200_raw, rsi_raw, regime)
+        ):
             return None
 
         ema20 = Decimal(str(ema20_raw))
@@ -155,7 +207,11 @@ class TrendPullbackConfirmationStrategy(TrendDCAStrategy):
                 self._clear_setup(symbol_state)
                 return None
 
-            crossed_up = previous_rsi is not None and previous_rsi <= Decimal("45") and rsi > Decimal("45")
+            crossed_up = (
+                previous_rsi is not None
+                and previous_rsi <= Decimal("45")
+                and rsi > Decimal("45")
+            )
             confirmed = (
                 crossed_up
                 and close > ema20
@@ -164,37 +220,21 @@ class TrendPullbackConfirmationStrategy(TrendDCAStrategy):
             if not confirmed:
                 return None
 
-            # Reuse baseline sizing, SL/TP and signal contract by asking the
-            # parent strategy to construct a base signal with a temporary RSI
-            # value that satisfies its original <=45 gate. All other baseline
-            # conditions are rechecked by the parent.
-            baseline_indicators = dict(indicators)
-            baseline_indicators["rsi"] = Decimal("45")
-            signal = super().should_enter(candle, baseline_indicators, portfolio_state)
-            if signal is None:
-                return None
-
-            metadata = {
-                **signal.metadata,
-                "setup_time": setup["setup_time"],
-                "confirmation_time": self._serialize_time(timestamp),
-                "setup_rsi": setup["setup_rsi"],
-                "confirmation_rsi": str(rsi),
-                "bars_since_setup": int(setup["bars_since_setup"]),
-                "confirmation_close": str(close),
-                "confirmation_ema20": str(ema20),
-                "confirmation_ema50": str(ema50),
-                "confirmation_ema200": str(ema200),
-            }
-            confirmed_signal = replace(
-                signal,
-                reason="Trend pullback recovery confirmed",
-                parameters_version=self.config.parameters_version,
+            signal = self._build_confirmed_signal(
+                symbol=symbol,
+                timestamp=timestamp,
+                close=close,
+                ema20=ema20,
+                ema50=ema50,
+                ema200=ema200,
+                rsi=rsi,
+                regime=regime,
                 indicators=indicators,
-                metadata=metadata,
+                portfolio_state=portfolio_state,
+                setup=setup,
             )
             self._clear_setup(symbol_state)
-            return confirmed_signal
+            return signal
 
         # IDLE -> PULLBACK_ARMED. No signal is emitted on the setup candle.
         if has_position:
