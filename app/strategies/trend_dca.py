@@ -74,7 +74,7 @@ class TrendDCAStrategy(BaseStrategy):
         indicators: dict[str, Any],
         portfolio_state: dict[str, Any],
     ) -> Signal | None:
-        """Check entry conditions for Trend DCA."""
+        """Check entry conditions for Trend DCA without mutating fill state."""
         symbol = str(candle["symbol"])
         close = Decimal(str(candle["close"]))
         timestamp = candle["open_time"]
@@ -119,9 +119,8 @@ class TrendDCAStrategy(BaseStrategy):
         stop_loss = close * (Decimal("1") - self.config.stop_loss_pct)
         take_profit = close * (Decimal("1") + self.config.take_profit_pct)
 
-        self.dca_levels[symbol] = 0
-        self.trailing_highs.pop(symbol, None)
-
+        # Do not change dca_levels/trailing_highs here. A signal may be rejected
+        # by Risk Engine or remain unfilled; fill-dependent state changes only in on_fill().
         return Signal(
             action="open_long",
             symbol=symbol,
@@ -288,7 +287,10 @@ class TrendDCAStrategy(BaseStrategy):
         return None
 
     def on_fill(self, signal: Signal, fill: Fill) -> None:
-        """Advance DCA state only when the corresponding order was filled."""
+        """Update fill-dependent strategy state only after an actual fill."""
         level = signal.metadata.get("dca_level")
         if isinstance(level, int):
             self.dca_levels[signal.symbol] = level
+            if level == 0:
+                # A newly filled base order starts a fresh trailing state.
+                self.trailing_highs.pop(signal.symbol, None)
