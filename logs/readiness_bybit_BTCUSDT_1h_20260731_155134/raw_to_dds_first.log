@@ -1,4 +1,0 @@
-﻿COMMAND: D:\py_pro\crypto_trading_system\.venv\Scripts\python.exe scripts/load_dds.py --exchange bybit --symbol BTCUSDT --interval 1h
-EXIT_CODE: 0
-
-run=4 bybit BTCUSDT 1h: source=0 inserted=0 rejected=0 deferred=0

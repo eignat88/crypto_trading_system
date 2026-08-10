@@ -1,5 +1,0 @@
-﻿COMMAND: D:\py_pro\crypto_trading_system\.venv\Scripts\python.exe -m pytest -m integration -q
-EXIT_CODE: 0
-
-..                                                                       [100%]
-2 passed, 95 deselected in 0.85s

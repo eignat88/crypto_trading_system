@@ -1,3 +1,0 @@
-﻿COMMAND: git status --porcelain --untracked-files=no
-EXIT_CODE: 0
-
