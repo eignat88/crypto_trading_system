@@ -1,4 +1,4 @@
-"""
+﻿"""
 Load Historical Bars Script using NautilusTrader.
 
 This script loads historical candle data from Bybit via NautilusTrader
@@ -145,7 +145,7 @@ async def load_bars_via_nautilus(
     from nautilus_trader.adapters.bybit import BYBIT
     from nautilus_trader.adapters.bybit import BybitDataClientConfig
     from nautilus_trader.adapters.bybit import BybitEnvironment
-    from nautilus_trader.adapters.bybit import BybitLiveDataClientFactory
+    from nautilus_trader.adapters.bybit import BybitDataClientFactory
     from nautilus_trader.adapters.bybit import BybitProductType
     from nautilus_trader.config import InstrumentProviderConfig
     from nautilus_trader.config import LoggingConfig
@@ -224,7 +224,7 @@ async def load_bars_via_nautilus(
     node.trader.add_actor(handler)
 
     # Register client factory
-    node.add_data_client_factory(BYBIT, BybitLiveDataClientFactory)
+    node.add_data_client_factory(BYBIT, BybitDataClientFactory)
     node.build()
 
     # Connect and run
@@ -296,3 +296,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
