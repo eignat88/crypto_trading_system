@@ -1,0 +1,650 @@
+{
+  "metadata": {
+    "created_at": "2026-08-10T11:08:38.195049+00:00",
+    "git_commit": "401c667d0cceab7d8a22bfb39b4f36d07b77bc51",
+    "exchange": "bybit",
+    "symbol": "BTCUSDT",
+    "interval": "1h",
+    "start": "2026-07-01T00:00:00Z",
+    "end": "2026-08-10T00:00:00Z",
+    "candle_count": 960,
+    "random_seed": 42
+  },
+  "strategy": {
+    "name": "TrendDCA",
+    "parameters": {
+      "parameters_version": "trend_dca_v1",
+      "base_order_pct": "0.25",
+      "safety_order_1_pct": "0.20",
+      "safety_order_2_pct": "0.25",
+      "safety_order_3_pct": "0.30",
+      "rsi_entry_threshold": "45",
+      "max_positions": 1,
+      "take_profit_pct": "0.05",
+      "stop_loss_pct": "0.15",
+      "trailing_stop_activation": "0.03",
+      "trailing_stop_distance": "0.02",
+      "max_holding_periods": 100,
+      "max_capital_per_position": "0.10"
+    }
+  },
+  "backtest": {
+    "initial_balance": "500",
+    "final_equity": "499.4453054339104039495281531",
+    "total_pnl": "-0.5546945660895960504718470375",
+    "total_trades": 4,
+    "winning_trades": 2,
+    "losing_trades": 2,
+    "win_rate": "0.5",
+    "profit_factor": "0.2128338517082301745399113367",
+    "average_trade": "-0.1386736415223990126179617594",
+    "average_win": "0.0749891120690793778486291883",
+    "average_loss": "-0.3523363951138774030845527070",
+    "max_drawdown": "0.001429896836428974050274206813",
+    "max_consecutive_losses": 1
+  },
+  "audit": {
+    "signals": [
+      {
+        "action": "open_long",
+        "symbol": "BTCUSDT",
+        "price": "63818.700000000000",
+        "quantity": "0.0001958673554929824643873974243",
+        "timestamp": "2026-07-11T23:00:00+00:00",
+        "reason": "Trend DCA base order",
+        "stop_loss": "54245.89500000000000",
+        "take_profit": "67009.63500000000000",
+        "strategy": "TrendDCA",
+        "parameters_version": "trend_dca_v1",
+        "indicators": {
+          "ema_20": "64190.279447928898",
+          "ema_50": "63970.467992760533",
+          "ema_200": "62997.738910320293",
+          "rsi": "37.624973244679",
+          "atr": "223.300147364797",
+          "volatility": "0.035328300706",
+          "regime": "TREND_UP",
+          "regime_confidence": "0.6303"
+        },
+        "regime": "TREND_UP",
+        "metadata": {
+          "dca_level": 0
+        }
+      },
+      {
+        "action": "close",
+        "symbol": "BTCUSDT",
+        "price": "62534.200000000000",
+        "quantity": "0.0001958673554929824643873974243",
+        "timestamp": "2026-07-14T01:00:00+00:00",
+        "reason": "Regime changed to TREND_DOWN",
+        "stop_loss": null,
+        "take_profit": null,
+        "strategy": "TrendDCA",
+        "parameters_version": "trend_dca_v1",
+        "indicators": {
+          "ema_20": "62556.989668719606",
+          "ema_50": "63070.901210558288",
+          "ema_200": "63084.977567361600",
+          "rsi": "46.531419706646",
+          "atr": "347.924669356415",
+          "volatility": "0.075959468879",
+          "regime": "TREND_DOWN",
+          "regime_confidence": "0.5873"
+        },
+        "regime": "TREND_DOWN",
+        "metadata": {}
+      },
+      {
+        "action": "open_long",
+        "symbol": "BTCUSDT",
+        "price": "64231.300000000000",
+        "quantity": "0.0001944935641891425926705822358",
+        "timestamp": "2026-07-16T07:00:00+00:00",
+        "reason": "Trend DCA base order",
+        "stop_loss": "54596.60500000000000",
+        "take_profit": "67442.86500000000000",
+        "strategy": "TrendDCA",
+        "parameters_version": "trend_dca_v1",
+        "indicators": {
+          "ema_20": "64728.502378423887",
+          "ema_50": "64461.491916849222",
+          "ema_200": "63655.847930352216",
+          "rsi": "39.260458392759",
+          "atr": "340.698924133426",
+          "volatility": "0.063270378453",
+          "regime": "TREND_UP",
+          "regime_confidence": "0.5904"
+        },
+        "regime": "TREND_UP",
+        "metadata": {
+          "dca_level": 0
+        }
+      },
+      {
+        "action": "close",
+        "symbol": "BTCUSDT",
+        "price": "65006.700000000000",
+        "quantity": "0.0001944935641891425926705822358",
+        "timestamp": "2026-07-20T11:00:00+00:00",
+        "reason": "Max holding period reached",
+        "stop_loss": null,
+        "take_profit": null,
+        "strategy": "TrendDCA",
+        "parameters_version": "trend_dca_v1",
+        "indicators": {
+          "ema_20": "64463.433273722132",
+          "ema_50": "64424.170574736867",
+          "ema_200": "64031.424741717280",
+          "rsi": "60.875088477059",
+          "atr": "355.060381089193",
+          "volatility": "0.074913793414",
+          "regime": "RANGE",
+          "regime_confidence": "0.6000"
+        },
+        "regime": "RANGE",
+        "metadata": {}
+      },
+      {
+        "action": "open_long",
+        "symbol": "BTCUSDT",
+        "price": "65932.600000000000",
+        "quantity": "0.0001895154394977265087440320552",
+        "timestamp": "2026-07-22T06:00:00+00:00",
+        "reason": "Trend DCA base order",
+        "stop_loss": "56042.71000000000000",
+        "take_profit": "69229.23000000000000",
+        "strategy": "TrendDCA",
+        "parameters_version": "trend_dca_v1",
+        "indicators": {
+          "ema_20": "66228.809716525366",
+          "ema_50": "65810.558617722476",
+          "ema_200": "64706.239254932741",
+          "rsi": "44.882821920857",
+          "atr": "286.986032491203",
+          "volatility": "0.052580880023",
+          "regime": "TREND_UP",
+          "regime_confidence": "0.6895"
+        },
+        "regime": "TREND_UP",
+        "metadata": {
+          "dca_level": 0
+        }
+      },
+      {
+        "action": "close",
+        "symbol": "BTCUSDT",
+        "price": "64068.500000000000",
+        "quantity": "0.0001895154394977265087440320552",
+        "timestamp": "2026-07-25T00:00:00+00:00",
+        "reason": "Regime changed to TREND_DOWN",
+        "stop_loss": null,
+        "take_profit": null,
+        "strategy": "TrendDCA",
+        "parameters_version": "trend_dca_v1",
+        "indicators": {
+          "ema_20": "64449.576272679590",
+          "ema_50": "64897.982699556976",
+          "ema_200": "64915.711298283337",
+          "rsi": "33.004589652054",
+          "atr": "251.828307433311",
+          "volatility": "0.054832264930",
+          "regime": "TREND_DOWN",
+          "regime_confidence": "0.6305"
+        },
+        "regime": "TREND_DOWN",
+        "metadata": {}
+      },
+      {
+        "action": "open_long",
+        "symbol": "BTCUSDT",
+        "price": "64421.300000000000",
+        "quantity": "0.0001938032044831450828788082746",
+        "timestamp": "2026-08-06T12:00:00+00:00",
+        "reason": "Trend DCA base order",
+        "stop_loss": "54758.10500000000000",
+        "take_profit": "67642.36500000000000",
+        "strategy": "TrendDCA",
+        "parameters_version": "trend_dca_v1",
+        "indicators": {
+          "ema_20": "64631.062568628777",
+          "ema_50": "64387.144726080194",
+          "ema_200": "64000.498249966292",
+          "rsi": "43.919899887301",
+          "atr": "221.063209541892",
+          "volatility": "0.033139180944",
+          "regime": "TREND_UP",
+          "regime_confidence": "0.5657"
+        },
+        "regime": "TREND_UP",
+        "metadata": {
+          "dca_level": 0
+        }
+      },
+      {
+        "action": "close",
+        "symbol": "BTCUSDT",
+        "price": "64901.000000000000",
+        "quantity": "0.0001938032044831450828788082746",
+        "timestamp": "2026-08-09T23:00:00+00:00",
+        "reason": "End of backtest",
+        "stop_loss": null,
+        "take_profit": null,
+        "strategy": "backtest_engine",
+        "parameters_version": "backtest_engine_v1",
+        "indicators": {},
+        "regime": null,
+        "metadata": {
+          "exit_source": "end_of_backtest"
+        }
+      }
+    ],
+    "risk_decisions": [
+      {
+        "order_id": "bt-order-00000001",
+        "approved": true,
+        "risk_level": "LOW",
+        "codes": [],
+        "reasons": [],
+        "requested_quantity": "0.0001958673554929824643873974243",
+        "approved_quantity": "0.0001958673554929824643873974243"
+      },
+      {
+        "order_id": "bt-order-00000003",
+        "approved": true,
+        "risk_level": "LOW",
+        "codes": [],
+        "reasons": [],
+        "requested_quantity": "0.0001958673554929824643873974243",
+        "approved_quantity": "0.0001958673554929824643873974243"
+      },
+      {
+        "order_id": "bt-order-00000005",
+        "approved": true,
+        "risk_level": "LOW",
+        "codes": [],
+        "reasons": [],
+        "requested_quantity": "0.0001944935641891425926705822358",
+        "approved_quantity": "0.0001944935641891425926705822358"
+      },
+      {
+        "order_id": "bt-order-00000007",
+        "approved": true,
+        "risk_level": "LOW",
+        "codes": [],
+        "reasons": [],
+        "requested_quantity": "0.0001944935641891425926705822358",
+        "approved_quantity": "0.0001944935641891425926705822358"
+      },
+      {
+        "order_id": "bt-order-00000009",
+        "approved": true,
+        "risk_level": "LOW",
+        "codes": [],
+        "reasons": [],
+        "requested_quantity": "0.0001895154394977265087440320552",
+        "approved_quantity": "0.0001895154394977265087440320552"
+      },
+      {
+        "order_id": "bt-order-00000011",
+        "approved": true,
+        "risk_level": "LOW",
+        "codes": [],
+        "reasons": [],
+        "requested_quantity": "0.0001895154394977265087440320552",
+        "approved_quantity": "0.0001895154394977265087440320552"
+      },
+      {
+        "order_id": "bt-order-00000013",
+        "approved": true,
+        "risk_level": "LOW",
+        "codes": [],
+        "reasons": [],
+        "requested_quantity": "0.0001938032044831450828788082746",
+        "approved_quantity": "0.0001938032044831450828788082746"
+      },
+      {
+        "order_id": "bt-order-00000015",
+        "approved": true,
+        "risk_level": "LOW",
+        "codes": [],
+        "reasons": [],
+        "requested_quantity": "0.0001938032044831450828788082746",
+        "approved_quantity": "0.0001938032044831450828788082746"
+      }
+    ],
+    "orders": [
+      {
+        "order_id": "bt-order-00000001",
+        "signal": {
+          "action": "open_long",
+          "symbol": "BTCUSDT",
+          "price": "63818.700000000000",
+          "quantity": "0.0001958673554929824643873974243",
+          "timestamp": "2026-07-11T23:00:00+00:00",
+          "reason": "Trend DCA base order",
+          "stop_loss": "54245.89500000000000",
+          "take_profit": "67009.63500000000000",
+          "strategy": "TrendDCA",
+          "parameters_version": "trend_dca_v1",
+          "indicators": {
+            "ema_20": "64190.279447928898",
+            "ema_50": "63970.467992760533",
+            "ema_200": "62997.738910320293",
+            "rsi": "37.624973244679",
+            "atr": "223.300147364797",
+            "volatility": "0.035328300706",
+            "regime": "TREND_UP",
+            "regime_confidence": "0.6303"
+          },
+          "regime": "TREND_UP",
+          "metadata": {
+            "dca_level": 0
+          }
+        },
+        "side": "buy",
+        "quantity": "0.0001958673554929824643873974243",
+        "requested_price": "63818.700000000000",
+        "created_at": "2026-07-11T23:00:00+00:00"
+      },
+      {
+        "order_id": "bt-order-00000003",
+        "signal": {
+          "action": "close",
+          "symbol": "BTCUSDT",
+          "price": "62534.200000000000",
+          "quantity": "0.0001958673554929824643873974243",
+          "timestamp": "2026-07-14T01:00:00+00:00",
+          "reason": "Regime changed to TREND_DOWN",
+          "stop_loss": null,
+          "take_profit": null,
+          "strategy": "TrendDCA",
+          "parameters_version": "trend_dca_v1",
+          "indicators": {
+            "ema_20": "62556.989668719606",
+            "ema_50": "63070.901210558288",
+            "ema_200": "63084.977567361600",
+            "rsi": "46.531419706646",
+            "atr": "347.924669356415",
+            "volatility": "0.075959468879",
+            "regime": "TREND_DOWN",
+            "regime_confidence": "0.5873"
+          },
+          "regime": "TREND_DOWN",
+          "metadata": {}
+        },
+        "side": "sell",
+        "quantity": "0.0001958673554929824643873974243",
+        "requested_price": "62534.200000000000",
+        "created_at": "2026-07-14T01:00:00+00:00"
+      },
+      {
+        "order_id": "bt-order-00000005",
+        "signal": {
+          "action": "open_long",
+          "symbol": "BTCUSDT",
+          "price": "64231.300000000000",
+          "quantity": "0.0001944935641891425926705822358",
+          "timestamp": "2026-07-16T07:00:00+00:00",
+          "reason": "Trend DCA base order",
+          "stop_loss": "54596.60500000000000",
+          "take_profit": "67442.86500000000000",
+          "strategy": "TrendDCA",
+          "parameters_version": "trend_dca_v1",
+          "indicators": {
+            "ema_20": "64728.502378423887",
+            "ema_50": "64461.491916849222",
+            "ema_200": "63655.847930352216",
+            "rsi": "39.260458392759",
+            "atr": "340.698924133426",
+            "volatility": "0.063270378453",
+            "regime": "TREND_UP",
+            "regime_confidence": "0.5904"
+          },
+          "regime": "TREND_UP",
+          "metadata": {
+            "dca_level": 0
+          }
+        },
+        "side": "buy",
+        "quantity": "0.0001944935641891425926705822358",
+        "requested_price": "64231.300000000000",
+        "created_at": "2026-07-16T07:00:00+00:00"
+      },
+      {
+        "order_id": "bt-order-00000007",
+        "signal": {
+          "action": "close",
+          "symbol": "BTCUSDT",
+          "price": "65006.700000000000",
+          "quantity": "0.0001944935641891425926705822358",
+          "timestamp": "2026-07-20T11:00:00+00:00",
+          "reason": "Max holding period reached",
+          "stop_loss": null,
+          "take_profit": null,
+          "strategy": "TrendDCA",
+          "parameters_version": "trend_dca_v1",
+          "indicators": {
+            "ema_20": "64463.433273722132",
+            "ema_50": "64424.170574736867",
+            "ema_200": "64031.424741717280",
+            "rsi": "60.875088477059",
+            "atr": "355.060381089193",
+            "volatility": "0.074913793414",
+            "regime": "RANGE",
+            "regime_confidence": "0.6000"
+          },
+          "regime": "RANGE",
+          "metadata": {}
+        },
+        "side": "sell",
+        "quantity": "0.0001944935641891425926705822358",
+        "requested_price": "65006.700000000000",
+        "created_at": "2026-07-20T11:00:00+00:00"
+      },
+      {
+        "order_id": "bt-order-00000009",
+        "signal": {
+          "action": "open_long",
+          "symbol": "BTCUSDT",
+          "price": "65932.600000000000",
+          "quantity": "0.0001895154394977265087440320552",
+          "timestamp": "2026-07-22T06:00:00+00:00",
+          "reason": "Trend DCA base order",
+          "stop_loss": "56042.71000000000000",
+          "take_profit": "69229.23000000000000",
+          "strategy": "TrendDCA",
+          "parameters_version": "trend_dca_v1",
+          "indicators": {
+            "ema_20": "66228.809716525366",
+            "ema_50": "65810.558617722476",
+            "ema_200": "64706.239254932741",
+            "rsi": "44.882821920857",
+            "atr": "286.986032491203",
+            "volatility": "0.052580880023",
+            "regime": "TREND_UP",
+            "regime_confidence": "0.6895"
+          },
+          "regime": "TREND_UP",
+          "metadata": {
+            "dca_level": 0
+          }
+        },
+        "side": "buy",
+        "quantity": "0.0001895154394977265087440320552",
+        "requested_price": "65932.600000000000",
+        "created_at": "2026-07-22T06:00:00+00:00"
+      },
+      {
+        "order_id": "bt-order-00000011",
+        "signal": {
+          "action": "close",
+          "symbol": "BTCUSDT",
+          "price": "64068.500000000000",
+          "quantity": "0.0001895154394977265087440320552",
+          "timestamp": "2026-07-25T00:00:00+00:00",
+          "reason": "Regime changed to TREND_DOWN",
+          "stop_loss": null,
+          "take_profit": null,
+          "strategy": "TrendDCA",
+          "parameters_version": "trend_dca_v1",
+          "indicators": {
+            "ema_20": "64449.576272679590",
+            "ema_50": "64897.982699556976",
+            "ema_200": "64915.711298283337",
+            "rsi": "33.004589652054",
+            "atr": "251.828307433311",
+            "volatility": "0.054832264930",
+            "regime": "TREND_DOWN",
+            "regime_confidence": "0.6305"
+          },
+          "regime": "TREND_DOWN",
+          "metadata": {}
+        },
+        "side": "sell",
+        "quantity": "0.0001895154394977265087440320552",
+        "requested_price": "64068.500000000000",
+        "created_at": "2026-07-25T00:00:00+00:00"
+      },
+      {
+        "order_id": "bt-order-00000013",
+        "signal": {
+          "action": "open_long",
+          "symbol": "BTCUSDT",
+          "price": "64421.300000000000",
+          "quantity": "0.0001938032044831450828788082746",
+          "timestamp": "2026-08-06T12:00:00+00:00",
+          "reason": "Trend DCA base order",
+          "stop_loss": "54758.10500000000000",
+          "take_profit": "67642.36500000000000",
+          "strategy": "TrendDCA",
+          "parameters_version": "trend_dca_v1",
+          "indicators": {
+            "ema_20": "64631.062568628777",
+            "ema_50": "64387.144726080194",
+            "ema_200": "64000.498249966292",
+            "rsi": "43.919899887301",
+            "atr": "221.063209541892",
+            "volatility": "0.033139180944",
+            "regime": "TREND_UP",
+            "regime_confidence": "0.5657"
+          },
+          "regime": "TREND_UP",
+          "metadata": {
+            "dca_level": 0
+          }
+        },
+        "side": "buy",
+        "quantity": "0.0001938032044831450828788082746",
+        "requested_price": "64421.300000000000",
+        "created_at": "2026-08-06T12:00:00+00:00"
+      },
+      {
+        "order_id": "bt-order-00000015",
+        "signal": {
+          "action": "close",
+          "symbol": "BTCUSDT",
+          "price": "64901.000000000000",
+          "quantity": "0.0001938032044831450828788082746",
+          "timestamp": "2026-08-09T23:00:00+00:00",
+          "reason": "End of backtest",
+          "stop_loss": null,
+          "take_profit": null,
+          "strategy": "backtest_engine",
+          "parameters_version": "backtest_engine_v1",
+          "indicators": {},
+          "regime": null,
+          "metadata": {
+            "exit_source": "end_of_backtest"
+          }
+        },
+        "side": "sell",
+        "quantity": "0.0001938032044831450828788082746",
+        "requested_price": "64901.000000000000",
+        "created_at": "2026-08-09T23:00:00+00:00"
+      }
+    ],
+    "fills": [
+      {
+        "fill_id": "bt-fill-00000002",
+        "order_id": "bt-order-00000001",
+        "symbol": "BTCUSDT",
+        "side": "buy",
+        "quantity": "0.0001958673554929824643873974243",
+        "price": "63891.41673702274414886706000",
+        "commission": "0.01251424283498072354750000000",
+        "timestamp": "2026-07-11T23:00:00+00:00"
+      },
+      {
+        "fill_id": "bt-fill-00000004",
+        "order_id": "bt-order-00000003",
+        "symbol": "BTCUSDT",
+        "side": "sell",
+        "quantity": "0.0001958673554929824643873974243",
+        "price": "62501.36887243075470135332300",
+        "commission": "0.01224197783573442319832457473",
+        "timestamp": "2026-07-14T01:00:00+00:00"
+      },
+      {
+        "fill_id": "bt-fill-00000006",
+        "order_id": "bt-order-00000005",
+        "symbol": "BTCUSDT",
+        "side": "buy",
+        "quantity": "0.0001944935641891425926705822358",
+        "price": "64281.08114065696240928252500",
+        "commission": "0.01250225658097784826700731053",
+        "timestamp": "2026-07-16T07:00:00+00:00"
+      },
+      {
+        "fill_id": "bt-fill-00000008",
+        "order_id": "bt-order-00000007",
+        "symbol": "BTCUSDT",
+        "side": "sell",
+        "quantity": "0.0001944935641891425926705822358",
+        "price": "64959.68645650838092478764200",
+        "commission": "0.01263424094753548951738366665",
+        "timestamp": "2026-07-20T11:00:00+00:00"
+      },
+      {
+        "fill_id": "bt-fill-00000010",
+        "order_id": "bt-order-00000009",
+        "symbol": "BTCUSDT",
+        "side": "buy",
+        "quantity": "0.0001895154394977265087440320552",
+        "price": "66014.12376197499016396424000",
+        "commission": "0.01251069567780800111578862414",
+        "timestamp": "2026-07-22T06:00:00+00:00"
+      },
+      {
+        "fill_id": "bt-fill-00000012",
+        "order_id": "bt-order-00000011",
+        "symbol": "BTCUSDT",
+        "side": "sell",
+        "quantity": "0.0001895154394977265087440320552",
+        "price": "63993.11062889004520737595000",
+        "commission": "0.01212768248566073053719375094",
+        "timestamp": "2026-07-25T00:00:00+00:00"
+      },
+      {
+        "fill_id": "bt-fill-00000014",
+        "order_id": "bt-order-00000013",
+        "symbol": "BTCUSDT",
+        "side": "buy",
+        "quantity": "0.0001938032044831450828788082746",
+        "price": "64510.98601758498416340915000",
+        "commission": "0.01250243581457533595921769176",
+        "timestamp": "2026-08-06T12:00:00+00:00"
+      },
+      {
+        "fill_id": "bt-fill-00000016",
+        "order_id": "bt-order-00000015",
+        "symbol": "BTCUSDT",
+        "side": "sell",
+        "quantity": "0.0001938032044831450828788082746",
+        "price": "64862.90708282351826244885000",
+        "commission": "0.01257063924474368582410630900",
+        "timestamp": "2026-08-09T23:00:00+00:00"
+      }
+    ]
+  }
+}
