@@ -6,24 +6,19 @@ and stores it in PostgreSQL.
 """
 
 import signal
-import sys
-from decimal import Decimal
-from typing import Optional
 
 import structlog
-from nautilus_trader.adapters.bybit import BYBIT
-from nautilus_trader.adapters.bybit import BybitDataClientConfig
-from nautilus_trader.adapters.bybit import BybitEnvironment
-from nautilus_trader.adapters.bybit import BybitLiveDataClientFactory
-from nautilus_trader.adapters.bybit import BybitProductType
-from nautilus_trader.config import InstrumentProviderConfig
-from nautilus_trader.config import LoggingConfig
-from nautilus_trader.config import TradingNodeConfig
+from nautilus_trader.adapters.bybit import (
+    BYBIT,
+    BybitDataClientConfig,
+    BybitEnvironment,
+    BybitLiveDataClientFactory,
+    BybitProductType,
+)
+from nautilus_trader.config import InstrumentProviderConfig, LoggingConfig, TradingNodeConfig
 from nautilus_trader.live.node import TradingNode
-from nautilus_trader.model.data import Bar
-from nautilus_trader.model.data import BarType
-from nautilus_trader.model.identifiers import InstrumentId
-from nautilus_trader.model.identifiers import TraderId
+from nautilus_trader.model.data import Bar, BarType
+from nautilus_trader.model.identifiers import InstrumentId, TraderId
 
 from app.config.settings import settings
 
@@ -51,7 +46,7 @@ class BybitMarketDataCollector:
     """
 
     def __init__(self):
-        self.node: Optional[TradingNode] = None
+        self.node: TradingNode | None = None
         self._setup_signal_handlers()
 
     def _setup_signal_handlers(self):
@@ -130,7 +125,6 @@ class BybitMarketDataCollector:
 
     def _create_data_handler(self):
         """Create a data handler actor."""
-        from nautilus_trader.core.uuid import UUID4
         from nautilus_trader.trader.actor import Actor
 
         instrument_ids = self._get_instrument_ids()

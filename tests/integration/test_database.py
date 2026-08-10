@@ -1,7 +1,7 @@
 """Integration test for PostgreSQL database."""
 
-import pytest
 import psycopg
+import pytest
 
 from app.config.settings import settings
 

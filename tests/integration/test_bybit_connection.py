@@ -17,14 +17,18 @@ class TestBybitConnection:
     @pytest.mark.asyncio
     async def test_bybit_connection(self):
         """Test that we can connect to Bybit."""
-        from nautilus_trader.adapters.bybit import BYBIT
-        from nautilus_trader.adapters.bybit import BybitDataClientConfig
-        from nautilus_trader.adapters.bybit import BybitEnvironment
-        from nautilus_trader.adapters.bybit import BybitLiveDataClientFactory
-        from nautilus_trader.adapters.bybit import BybitProductType
-        from nautilus_trader.config import InstrumentProviderConfig
-        from nautilus_trader.config import LoggingConfig
-        from nautilus_trader.config import TradingNodeConfig
+        from nautilus_trader.adapters.bybit import (
+            BYBIT,
+            BybitDataClientConfig,
+            BybitEnvironment,
+            BybitLiveDataClientFactory,
+            BybitProductType,
+        )
+        from nautilus_trader.config import (
+            InstrumentProviderConfig,
+            LoggingConfig,
+            TradingNodeConfig,
+        )
         from nautilus_trader.live.node import TradingNode
         from nautilus_trader.model.identifiers import TraderId
 
@@ -82,17 +86,20 @@ class TestBybitConnection:
     @pytest.mark.asyncio
     async def test_spot_instruments_loaded(self):
         """Test that Spot instruments are loaded."""
-        from nautilus_trader.adapters.bybit import BYBIT
-        from nautilus_trader.adapters.bybit import BybitDataClientConfig
-        from nautilus_trader.adapters.bybit import BybitEnvironment
-        from nautilus_trader.adapters.bybit import BybitLiveDataClientFactory
-        from nautilus_trader.adapters.bybit import BybitProductType
-        from nautilus_trader.config import InstrumentProviderConfig
-        from nautilus_trader.config import LoggingConfig
-        from nautilus_trader.config import TradingNodeConfig
+        from nautilus_trader.adapters.bybit import (
+            BYBIT,
+            BybitDataClientConfig,
+            BybitEnvironment,
+            BybitLiveDataClientFactory,
+            BybitProductType,
+        )
+        from nautilus_trader.config import (
+            InstrumentProviderConfig,
+            LoggingConfig,
+            TradingNodeConfig,
+        )
         from nautilus_trader.live.node import TradingNode
-        from nautilus_trader.model.identifiers import InstrumentId
-        from nautilus_trader.model.identifiers import TraderId
+        from nautilus_trader.model.identifiers import InstrumentId, TraderId
 
         # Get environment
         env = settings.bybit_environment.lower()

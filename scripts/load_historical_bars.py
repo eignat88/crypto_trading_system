@@ -22,6 +22,7 @@ import structlog
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg
+
 from app.config.settings import settings
 
 # Configure logging
@@ -142,19 +143,17 @@ async def load_bars_via_nautilus(
     end_date: datetime,
 ) -> list:
     """Load bars using NautilusTrader."""
-    from nautilus_trader.adapters.bybit import BYBIT
-    from nautilus_trader.adapters.bybit import BybitDataClientConfig
-    from nautilus_trader.adapters.bybit import BybitEnvironment
-    from nautilus_trader.adapters.bybit import BybitDataClientFactory
-    from nautilus_trader.adapters.bybit import BybitProductType
-    from nautilus_trader.config import InstrumentProviderConfig
-    from nautilus_trader.config import LoggingConfig
-    from nautilus_trader.config import TradingNodeConfig
+    from nautilus_trader.adapters.bybit import (
+        BYBIT,
+        BybitDataClientConfig,
+        BybitDataClientFactory,
+        BybitEnvironment,
+        BybitProductType,
+    )
+    from nautilus_trader.config import InstrumentProviderConfig, LoggingConfig, TradingNodeConfig
     from nautilus_trader.live.node import TradingNode
-    from nautilus_trader.model.data import Bar
-    from nautilus_trader.model.data import BarType
-    from nautilus_trader.model.identifiers import InstrumentId
-    from nautilus_trader.model.identifiers import TraderId
+    from nautilus_trader.model.data import Bar, BarType
+    from nautilus_trader.model.identifiers import InstrumentId, TraderId
 
     # Get environment
     env = settings.bybit_environment.lower()

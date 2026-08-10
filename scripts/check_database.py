@@ -11,6 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import psycopg
+
 from app.config.settings import settings
 
 
@@ -81,7 +82,7 @@ def check_database():
         print("Database check: PASSED")
 
     except psycopg.OperationalError as e:
-        print(f"Connection: FAILED")
+        print("Connection: FAILED")
         print(f"Error: {e}")
         return 1
     except Exception as e:

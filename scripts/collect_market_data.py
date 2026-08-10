@@ -12,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import structlog
+
 from app.collectors.bybit_market_data import BybitMarketDataCollector
 
 # Configure logging

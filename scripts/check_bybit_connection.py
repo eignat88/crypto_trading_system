@@ -12,17 +12,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import structlog
-from nautilus_trader.adapters.bybit import BYBIT
-from nautilus_trader.adapters.bybit import BybitDataClientConfig
-from nautilus_trader.adapters.bybit import BybitEnvironment
-from nautilus_trader.adapters.bybit import BybitLiveDataClientFactory
-from nautilus_trader.adapters.bybit import BybitProductType
-from nautilus_trader.config import InstrumentProviderConfig
-from nautilus_trader.config import LoggingConfig
-from nautilus_trader.config import TradingNodeConfig
+from nautilus_trader.adapters.bybit import (
+    BYBIT,
+    BybitDataClientConfig,
+    BybitEnvironment,
+    BybitLiveDataClientFactory,
+    BybitProductType,
+)
+from nautilus_trader.config import InstrumentProviderConfig, LoggingConfig, TradingNodeConfig
 from nautilus_trader.live.node import TradingNode
-from nautilus_trader.model.identifiers import InstrumentId
-from nautilus_trader.model.identifiers import TraderId
+from nautilus_trader.model.identifiers import InstrumentId, TraderId
 
 from app.config.settings import settings
 
