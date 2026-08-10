@@ -1,6 +1,11 @@
 from copy import deepcopy
+from datetime import datetime, timezone
 
-from app.backtest.persistence import build_run_fingerprint, run_id_from_fingerprint
+from app.backtest.persistence import (
+    _as_utc_datetime,
+    build_run_fingerprint,
+    run_id_from_fingerprint,
+)
 
 
 def _payload() -> dict:
@@ -65,3 +70,21 @@ def test_run_id_is_deterministic_for_same_fingerprint():
     fingerprint = build_run_fingerprint(_payload())
 
     assert run_id_from_fingerprint(fingerprint) == run_id_from_fingerprint(fingerprint)
+
+
+def test_as_utc_datetime_parses_z_suffix():
+    result = _as_utc_datetime("2026-08-10T12:02:50.532733Z")
+
+    assert result == datetime(2026, 8, 10, 12, 2, 50, 532733, tzinfo=timezone.utc)
+
+
+def test_as_utc_datetime_converts_offset_to_utc():
+    result = _as_utc_datetime("2026-08-10T15:02:50+03:00")
+
+    assert result == datetime(2026, 8, 10, 12, 2, 50, tzinfo=timezone.utc)
+
+
+def test_as_utc_datetime_treats_naive_datetime_as_utc():
+    result = _as_utc_datetime(datetime(2026, 8, 10, 12, 2, 50))
+
+    assert result == datetime(2026, 8, 10, 12, 2, 50, tzinfo=timezone.utc)
