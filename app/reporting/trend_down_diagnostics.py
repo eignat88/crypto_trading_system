@@ -117,6 +117,7 @@ def reconstruct_trend_down_exits(
     fill_rows: list[dict[str, Any]],
     candle_rows: list[dict[str, Any]],
     commission_config: CommissionConfig,
+    bar_delta: timedelta = timedelta(hours=1),
 ) -> list[TrendDownDiagnostic]:
     """Reconstruct baseline TREND_DOWN exits and inspect the next three candles.
 
@@ -196,11 +197,10 @@ def reconstruct_trend_down_exits(
                 - hypothetical_exit_commission
             )
 
-            future = []
-            for offset in (1, 2, 3):
-                row_after = candle_by_time.get(signal_time + timedelta(hours=offset))
-                future.append(row_after)
-
+            future = [
+                candle_by_time.get(signal_time + bar_delta * offset)
+                for offset in (1, 2, 3)
+            ]
             closes = [
                 None if item is None else _decimal(item["close_price"])
                 for item in future
@@ -220,15 +220,13 @@ def reconstruct_trend_down_exits(
                 if item is not None
             ]
 
-            continued = len(regimes) == 3 and all(
-                regime == "TREND_DOWN" for regime in regimes
-            )
+            continued = all(regime == "TREND_DOWN" for regime in regimes)
             false_switch = any(
                 regime not in (None, "TREND_DOWN") for regime in regimes
             )
-
             min_low = min(lows) if lows else None
             max_high = max(highs) if highs else None
+
             records.append(
                 TrendDownDiagnostic(
                     run_id=run_id,
@@ -336,6 +334,10 @@ async def build_trend_down_diagnostics(
         run = run_result.mappings().one_or_none()
         if run is None:
             raise ValueError(f"Backtest run not found: {run_id}")
+        if str(run["interval_code"]) != "1h":
+            raise ValueError(
+                "TREND_DOWN diagnostics currently supports only 1h baseline runs"
+            )
 
         fill_result = await session.execute(
             text(
@@ -397,6 +399,7 @@ async def build_trend_down_diagnostics(
         fill_rows=fill_rows,
         candle_rows=candle_rows,
         commission_config=commission_config,
+        bar_delta=timedelta(hours=1),
     )
     return summarize_trend_down_diagnostics(
         run_id=run_id,
