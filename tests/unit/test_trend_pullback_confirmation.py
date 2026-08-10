@@ -62,6 +62,18 @@ def _arm(strategy: TrendPullbackConfirmationStrategy, hour: int = 0) -> None:
     assert strategy.state[SYMBOL]["phase"] == "PULLBACK_ARMED"
 
 
+def _assert_same_trade_behavior(left, right) -> None:
+    assert left is not None
+    assert right is not None
+    assert left.action == right.action
+    assert left.symbol == right.symbol
+    assert left.price == right.price
+    assert left.quantity == right.quantity
+    assert left.reason == right.reason
+    assert left.stop_loss == right.stop_loss
+    assert left.take_profit == right.take_profit
+
+
 def test_setup_arms_without_immediate_buy() -> None:
     strategy = TrendPullbackConfirmationStrategy([SYMBOL])
     _arm(strategy)
@@ -104,8 +116,6 @@ def test_rsi_above_45_without_cross_does_not_confirm() -> None:
     strategy = TrendPullbackConfirmationStrategy([SYMBOL])
     _arm(strategy)
     strategy.should_enter(_candle(1), _indicators(rsi="46"), _portfolio())
-    # Force a second armed setup to verify that previous RSI=46 prevents a
-    # false cross even though current RSI remains above 45.
     strategy.state[SYMBOL]["phase"] = "PULLBACK_ARMED"
     strategy.state[SYMBOL]["setup"] = {
         "setup_time": _candle(1)["open_time"].isoformat(),
@@ -175,7 +185,6 @@ def test_timeout_at_12_bars_cancels_before_confirmation() -> None:
         ) is None
         assert strategy.state[SYMBOL]["phase"] == "PULLBACK_ARMED"
 
-    # On the 12th completed candle, even a valid cross is too late.
     assert strategy.should_enter(
         _candle(12, "106"), _indicators(rsi="46", ema20="105"), _portfolio()
     ) is None
@@ -234,9 +243,10 @@ def test_dca_behavior_matches_baseline_for_equivalent_position() -> None:
         "unrealized_pnl_pct": Decimal("-0.04"),
     }
 
-    assert baseline.should_add_dca(candle, indicators, position) == v2.should_add_dca(
-        candle, indicators, position
-    )
+    baseline_signal = baseline.should_add_dca(candle, indicators, position)
+    v2_signal = v2.should_add_dca(candle, indicators, position)
+    _assert_same_trade_behavior(baseline_signal, v2_signal)
+    assert v2_signal.parameters_version == PARAMETERS_VERSION
 
 
 def test_exit_behavior_matches_baseline_for_equivalent_position() -> None:
@@ -251,9 +261,10 @@ def test_exit_behavior_matches_baseline_for_equivalent_position() -> None:
         "unrealized_pnl_pct": Decimal("-0.02"),
     }
 
-    assert baseline.should_exit(candle, indicators, position) == v2.should_exit(
-        candle, indicators, position
-    )
+    baseline_signal = baseline.should_exit(candle, indicators, position)
+    v2_signal = v2.should_exit(candle, indicators, position)
+    _assert_same_trade_behavior(baseline_signal, v2_signal)
+    assert v2_signal.parameters_version == PARAMETERS_VERSION
 
 
 def test_final_candle_confirmation_produces_signal_but_no_fill() -> None:
@@ -262,7 +273,9 @@ def test_final_candle_confirmation_produces_signal_but_no_fill() -> None:
         {**_candle(0), "indicators": _indicators(rsi="44")},
         {**_candle(1, "106"), "indicators": _indicators(rsi="46", ema20="105")},
     ]
-    engine = BacktestEngine(BacktestConfig(initial_balance=Decimal("500"), random_seed=42))
+    engine = BacktestEngine(
+        BacktestConfig(initial_balance=Decimal("500"), random_seed=42)
+    )
 
     result = engine.run(
         candles=candles,
