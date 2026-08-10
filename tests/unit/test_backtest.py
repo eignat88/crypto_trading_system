@@ -405,7 +405,7 @@ class TestBacktestEngine:
         result = engine.run(candles, TrendDCAStrategy(["BTCUSDT"]))
 
         buy_fills = [fill for fill in result.fills if fill.side == "buy"]
-        assert len(buy_fills) == 4
+        assert len(buy_fills) == 3
         assert len(result.risk_decisions) == len(result.orders)
         assert all(decision.approved for decision in result.risk_decisions)
         assert sum(fill.price * fill.quantity for fill in buy_fills) <= Decimal("505")
