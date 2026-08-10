@@ -207,9 +207,10 @@ class TestTrendDCAStrategy:
             "quantity": Decimal("1"),
             "capital": Decimal("5000"),
         }
+        indicators = {"regime": MarketRegime.TREND_UP}
 
-        first = self.strategy.should_add_dca(candle, {}, position)
-        repeated = self.strategy.should_add_dca(candle, {}, position)
+        first = self.strategy.should_add_dca(candle, indicators, position)
+        repeated = self.strategy.should_add_dca(candle, indicators, position)
 
         assert first is not None
         assert repeated is not None

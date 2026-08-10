@@ -41,11 +41,11 @@ class TestMarketRegimeDetector:
         assert result.regime != MarketRegime.HIGH_VOLATILITY
 
     def test_range_detection(self):
-        # Create ranging data with low volatility
-        closes = []
-        for i in range(300):
-            # Small oscillation around 100
-            closes.append(Decimal("100") + Decimal(str(2 * (i % 20 - 10))) / Decimal("10"))
+        # Stable low-volatility oscillation around 100 without directional phase bias.
+        closes = [
+            Decimal("100.1") if i % 2 == 0 else Decimal("99.9")
+            for i in range(300)
+        ]
 
         highs = [c * Decimal("1.002") for c in closes]
         lows = [c * Decimal("0.998") for c in closes]
