@@ -40,7 +40,11 @@ class BatchIndicatorCollector(IndicatorCollector):
             ema_200_series = calculate_ema_series(closes, 200)
             rsi_14_series = calculate_rsi_series(closes, 14)
             atr_14_series = calculate_atr_series(highs, lows, closes, 14)
-            volatility_20_series = calculate_historical_volatility_series(closes, 20)
+            volatility_20_series = calculate_historical_volatility_series(
+                closes,
+                20,
+                timeframe=interval,
+            )
 
             logger.info(
                 "batch_indicators_started",
@@ -171,8 +175,21 @@ def classify_regime(
     if ema_200 is None:
         reasons.append("Insufficient data for EMA 200")
         return RegimeResult(
-            MarketRegime.RANGE,
-            Decimal("0.3"),
+            MarketRegime.UNKNOWN,
+            Decimal("0"),
+            reasons,
+            ema_20,
+            ema_50,
+            ema_200,
+            atr_percentage,
+            volatility,
+        )
+
+    if ema_200_slope is None:
+        reasons.append("Insufficient EMA 200 history for slope")
+        return RegimeResult(
+            MarketRegime.UNKNOWN,
+            Decimal("0"),
             reasons,
             ema_20,
             ema_50,
@@ -186,7 +203,6 @@ def classify_regime(
         and ema_50 is not None
         and current_price > ema_200
         and ema_50 > ema_200
-        and ema_200_slope is not None
         and ema_200_slope > detector.slope_threshold
     ):
         reasons.append(f"Price {current_price} > EMA200 {ema_200}")
@@ -210,7 +226,6 @@ def classify_regime(
         and ema_50 is not None
         and current_price < ema_200
         and ema_50 < ema_200
-        and ema_200_slope is not None
         and ema_200_slope < -detector.slope_threshold
     ):
         reasons.append(f"Price {current_price} < EMA200 {ema_200}")
@@ -230,8 +245,7 @@ def classify_regime(
         )
 
     reasons.append("No clear trend detected")
-    if ema_200_slope is not None:
-        reasons.append(f"EMA200 slope {ema_200_slope:.4f} near zero")
+    reasons.append(f"EMA200 slope {ema_200_slope:.4f} near zero")
     if ema_50 is not None:
         ema_distance = abs(ema_50 - ema_200) / ema_200
         if ema_distance < detector.range_distance_threshold:
