@@ -9,6 +9,15 @@ from app.backtest.backtest_engine import BacktestConfig, BacktestEngine, Backtes
 from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
 
+_INTERVAL_SECONDS = {
+    "5m": 5 * 60,
+    "15m": 15 * 60,
+    "1h": 60 * 60,
+    "4h": 4 * 60 * 60,
+    "1d": 24 * 60 * 60,
+}
+
+
 @dataclass(frozen=True)
 class WalkForwardConfig:
     train_days: int = 180
@@ -41,6 +50,7 @@ class WalkForwardWindow:
 class WalkForwardWindowResult:
     window: WalkForwardWindow
     candle_count: int
+    initial_balance: Decimal
     final_equity: Decimal
     total_pnl: Decimal
     total_trades: int
@@ -52,7 +62,7 @@ class WalkForwardWindowResult:
 
     @property
     def return_pct(self) -> Decimal:
-        return self.total_pnl
+        return self.total_pnl / self.initial_balance
 
 
 @dataclass(frozen=True)
@@ -118,6 +128,30 @@ def generate_walk_forward_windows(
     return tuple(windows)
 
 
+def _validate_test_candles(
+    candles: list[dict[str, Any]],
+    interval: str,
+    window: WalkForwardWindow,
+) -> None:
+    if interval not in _INTERVAL_SECONDS:
+        raise ValueError(f"Unsupported interval: {interval}")
+
+    step = _INTERVAL_SECONDS[interval]
+    expected = int((window.test_end - window.test_start).total_seconds() / step)
+    if len(candles) != expected:
+        raise ValueError(
+            f"Incomplete test window {window.index}: expected={expected} actual={len(candles)}"
+        )
+
+    for previous, current in zip(candles, candles[1:]):
+        delta = (current["open_time"] - previous["open_time"]).total_seconds()
+        if delta != step:
+            raise ValueError(
+                f"Time gap in test window {window.index}: "
+                f"{previous['open_time']} -> {current['open_time']}"
+            )
+
+
 def _run_test_window(
     candles: list[dict[str, Any]],
     symbol: str,
@@ -163,14 +197,14 @@ def run_fixed_parameter_walk_forward(
             for candle in candles
             if window.test_start <= candle["open_time"] < window.test_end
         ]
-        if not test_candles:
-            raise ValueError(f"No candles found for walk-forward window {window.index}")
+        _validate_test_candles(test_candles, interval, window)
 
         result = _run_test_window(test_candles, symbol, wf_config)
         results.append(
             WalkForwardWindowResult(
                 window=window,
                 candle_count=len(test_candles),
+                initial_balance=wf_config.initial_balance,
                 final_equity=result.portfolio.total_equity,
                 total_pnl=result.total_pnl,
                 total_trades=result.total_trades,
