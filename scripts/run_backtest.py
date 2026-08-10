@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import text
 
 from app.backtest.backtest_engine import BacktestConfig, BacktestEngine
+from app.backtest.persistence import persist_backtest_audit
 from app.database.connection import async_session_factory
 from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
@@ -213,9 +214,7 @@ def validate_candles(
         )
 
     for previous, current in zip(candles, candles[1:]):
-        delta = (
-            current["open_time"] - previous["open_time"]
-        ).total_seconds()
+        delta = (current["open_time"] - previous["open_time"]).total_seconds()
 
         if delta != step:
             raise RuntimeError(
@@ -228,6 +227,8 @@ def build_output(
     result: Any,
     args: argparse.Namespace,
     candles: list[dict[str, Any]],
+    strategy_config: DCAConfig,
+    backtest_config: BacktestConfig,
 ) -> dict[str, Any]:
     final_equity = result.portfolio.total_equity
 
@@ -245,7 +246,13 @@ def build_output(
         },
         "strategy": {
             "name": "TrendDCA",
-            "parameters": asdict(DCAConfig()),
+            "parameters": asdict(strategy_config),
+        },
+        "configuration": {
+            "initial_balance": backtest_config.initial_balance,
+            "random_seed": backtest_config.random_seed,
+            "commission": asdict(backtest_config.commission_config),
+            "slippage": asdict(backtest_config.slippage_config),
         },
         "backtest": {
             "initial_balance": args.initial_balance,
@@ -263,22 +270,12 @@ def build_output(
             "max_consecutive_losses": result.max_consecutive_losses,
         },
         "audit": {
-            "signals": [
-                serialize_object(item)
-                for item in result.signals
-            ],
+            "signals": [serialize_object(item) for item in result.signals],
             "risk_decisions": [
-                serialize_object(item)
-                for item in result.risk_decisions
+                serialize_object(item) for item in result.risk_decisions
             ],
-            "orders": [
-                serialize_object(item)
-                for item in result.orders
-            ],
-            "fills": [
-                serialize_object(item)
-                for item in result.fills
-            ],
+            "orders": [serialize_object(item) for item in result.orders],
+            "fills": [serialize_object(item) for item in result.fills],
         },
     }
 
@@ -337,8 +334,10 @@ async def main() -> None:
         end=end,
     )
 
+    strategy_config = DCAConfig()
     strategy = TrendDCAStrategy(
         symbols=[args.symbol],
+        config=strategy_config,
     )
 
     config = BacktestConfig(
@@ -358,6 +357,8 @@ async def main() -> None:
         result=result,
         args=args,
         candles=candles,
+        strategy_config=strategy_config,
+        backtest_config=config,
     )
 
     output_dir = Path("artifacts/backtests")
@@ -379,9 +380,12 @@ async def main() -> None:
         encoding="utf-8",
     )
 
+    run_id = await persist_backtest_audit(payload, str(output_file))
+
     print()
     print("BACKTEST COMPLETED")
     print("------------------")
+    print(f"run_id             : {run_id}")
     print(f"symbol             : {args.symbol}")
     print(f"interval           : {args.interval}")
     print(f"candles            : {len(candles)}")
