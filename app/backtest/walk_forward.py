@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
 from app.backtest.backtest_engine import BacktestConfig, BacktestEngine, BacktestResult
+from app.strategies.base_strategy import BaseStrategy
 from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
 
@@ -16,6 +18,8 @@ _INTERVAL_SECONDS = {
     "4h": 4 * 60 * 60,
     "1d": 24 * 60 * 60,
 }
+
+StrategyFactory = Callable[[str], BaseStrategy]
 
 
 @dataclass(frozen=True)
@@ -152,12 +156,17 @@ def _validate_test_candles(
             )
 
 
+def _default_strategy_factory(symbol: str) -> BaseStrategy:
+    return TrendDCAStrategy(symbols=[symbol], config=DCAConfig())
+
+
 def _run_test_window(
     candles: list[dict[str, Any]],
     symbol: str,
     config: WalkForwardConfig,
+    strategy_factory: StrategyFactory,
 ) -> BacktestResult:
-    strategy = TrendDCAStrategy(symbols=[symbol], config=DCAConfig())
+    strategy = strategy_factory(symbol)
     engine = BacktestEngine(
         config=BacktestConfig(
             initial_balance=config.initial_balance,
@@ -179,16 +188,22 @@ def run_fixed_parameter_walk_forward(
     start: datetime,
     end: datetime,
     config: WalkForwardConfig | None = None,
+    strategy_factory: StrategyFactory | None = None,
 ) -> WalkForwardResult:
-    """Run fixed TrendDCA parameters on sequential out-of-sample test windows.
+    """Run fixed strategy parameters on sequential out-of-sample test windows.
 
-    The train slice is deliberately not optimized in this baseline version. It
-    defines chronology and future optimization boundaries only. Every test window
-    starts from a fresh portfolio, strategy instance, Risk Engine, and deterministic
-    slippage RNG with the same seed.
+    The train slice is deliberately not optimized in this baseline/experiment
+    runner. It defines chronology and future optimization boundaries only. Every
+    test window starts from a fresh portfolio, strategy instance, Risk Engine,
+    and deterministic slippage RNG with the same seed.
+
+    ``strategy_factory`` allows controlled A/B experiments while keeping the
+    walk-forward engine, data, risk model, costs, seed, and window boundaries
+    identical. Omitting it preserves the original TrendDCA baseline behavior.
     """
     wf_config = config or WalkForwardConfig()
     windows = generate_walk_forward_windows(start, end, wf_config)
+    factory = strategy_factory or _default_strategy_factory
 
     results: list[WalkForwardWindowResult] = []
     for window in windows:
@@ -199,7 +214,7 @@ def run_fixed_parameter_walk_forward(
         ]
         _validate_test_candles(test_candles, interval, window)
 
-        result = _run_test_window(test_candles, symbol, wf_config)
+        result = _run_test_window(test_candles, symbol, wf_config, factory)
         results.append(
             WalkForwardWindowResult(
                 window=window,
