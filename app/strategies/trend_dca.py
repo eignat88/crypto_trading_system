@@ -11,6 +11,9 @@ from app.strategies.base_strategy import BaseStrategy
 @dataclass
 class DCAConfig:
     """DCA configuration."""
+
+    parameters_version: str = "trend_dca_v1"
+
     # Position allocation percentages
     base_order_pct: Decimal = Decimal("0.25")  # 25%
     safety_order_1_pct: Decimal = Decimal("0.20")  # 20%
@@ -49,6 +52,9 @@ class TrendDCAStrategy(BaseStrategy):
     - Safety order 1: 20%
     - Safety order 2: 25%
     - Safety order 3: 30%
+
+    MVP safety rule:
+    - DCA additions are allowed only while market_regime remains TREND_UP.
     """
 
     def __init__(
@@ -59,7 +65,7 @@ class TrendDCAStrategy(BaseStrategy):
         super().__init__("TrendDCA", symbols)
         self.config = config or DCAConfig()
         self.regime_detector = MarketRegimeDetector()
-        self.dca_levels: dict[str, int] = {}  # Track DCA level per symbol
+        self.dca_levels: dict[str, int] = {}
         self.trailing_highs: dict[str, Decimal] = {}
 
     def should_enter(
@@ -75,29 +81,24 @@ class TrendDCAStrategy(BaseStrategy):
         if not isinstance(timestamp, datetime):
             raise TypeError("candle.open_time must be datetime")
 
-        # Get indicators
         ema_200 = indicators.get("ema_200")
         ema_50 = indicators.get("ema_50")
         rsi = indicators.get("rsi")
         regime = indicators.get("regime")
         volatility = indicators.get("volatility")
 
-        # Check if we have all required indicators
         if any(value is None for value in (ema_200, ema_50, rsi, regime)):
             return None
         ema_200_value = Decimal(str(ema_200))
         ema_50_value = Decimal(str(ema_50))
         rsi_value = Decimal(str(rsi))
 
-        # Check if we already have a position
         if portfolio_state.get("has_position", False):
             return None
 
-        # Check regime
         if regime != MarketRegime.TREND_UP:
             return None
 
-        # Check entry conditions
         if close <= ema_200_value:
             return None
 
@@ -107,22 +108,17 @@ class TrendDCAStrategy(BaseStrategy):
         if rsi_value > self.config.rsi_entry_threshold:
             return None
 
-        # Check volatility (if available)
         if volatility is not None and Decimal(str(volatility)) > Decimal("0.8"):
             return None
 
-        # Calculate position size (base order)
         capital = Decimal(str(portfolio_state.get("capital", "0")))
         max_position_value = capital * self.config.max_capital_per_position
         base_order_value = max_position_value * self.config.base_order_pct
         quantity = base_order_value / close
 
-        # The base order is 2.5% of capital by default, so a wider stop can
-        # coexist with the 3/5/8% DCA ladder while remaining below 0.5% risk.
         stop_loss = close * (Decimal("1") - self.config.stop_loss_pct)
         take_profit = close * (Decimal("1") + self.config.take_profit_pct)
 
-        # Reset DCA level
         self.dca_levels[symbol] = 0
         self.trailing_highs.pop(symbol, None)
 
@@ -136,6 +132,7 @@ class TrendDCAStrategy(BaseStrategy):
             stop_loss=stop_loss,
             take_profit=take_profit,
             strategy=self.name,
+            parameters_version=self.config.parameters_version,
             regime=str(regime),
             indicators=indicators,
             metadata={"dca_level": 0},
@@ -156,14 +153,12 @@ class TrendDCAStrategy(BaseStrategy):
         if not isinstance(timestamp, datetime):
             raise TypeError("candle.open_time must be datetime")
 
-        # Get position info
         entry_price = Decimal(str(position["entry_price"]))
         quantity = Decimal(str(position["quantity"]))
         unrealized_pnl_pct = Decimal(str(position.get("unrealized_pnl_pct", "0")))
-
-        # Get indicators
         regime = indicators.get("regime")
-        # Check holding period
+        regime_value = None if regime is None else str(regime)
+
         holding_periods = int(position.get("holding_periods", 0))
         if holding_periods >= self.config.max_holding_periods:
             return Signal(
@@ -173,9 +168,12 @@ class TrendDCAStrategy(BaseStrategy):
                 quantity=quantity,
                 timestamp=timestamp,
                 reason="Max holding period reached",
+                strategy=self.name,
+                parameters_version=self.config.parameters_version,
+                indicators=indicators,
+                regime=regime_value,
             )
 
-        # Check regime change
         if regime and regime == MarketRegime.TREND_DOWN:
             return Signal(
                 action="close",
@@ -184,10 +182,12 @@ class TrendDCAStrategy(BaseStrategy):
                 quantity=quantity,
                 timestamp=timestamp,
                 reason="Regime changed to TREND_DOWN",
+                strategy=self.name,
+                parameters_version=self.config.parameters_version,
+                indicators=indicators,
+                regime=regime_value,
             )
 
-        # Once activated, trail the highest observed close instead of the current
-        # close (which can never be below a percentage of itself).
         activation_price = entry_price * (Decimal("1") + self.config.trailing_stop_activation)
         trailing_high = self.trailing_highs.get(symbol)
         if trailing_high is not None or high >= activation_price:
@@ -199,13 +199,17 @@ class TrendDCAStrategy(BaseStrategy):
                 return Signal(
                     action="close",
                     symbol=symbol,
-                    price=close,
+                    price=trailing_stop,
                     quantity=quantity,
                     timestamp=timestamp,
                     reason="Trailing stop hit",
+                    strategy=self.name,
+                    parameters_version=self.config.parameters_version,
+                    indicators=indicators,
+                    regime=regime_value,
+                    metadata={"exit_source": "trailing_stop"},
                 )
 
-        # Check take profit
         if unrealized_pnl_pct >= self.config.take_profit_pct:
             return Signal(
                 action="close",
@@ -214,6 +218,10 @@ class TrendDCAStrategy(BaseStrategy):
                 quantity=quantity,
                 timestamp=timestamp,
                 reason="Take profit hit",
+                strategy=self.name,
+                parameters_version=self.config.parameters_version,
+                indicators=indicators,
+                regime=regime_value,
             )
 
         return None
@@ -224,28 +232,24 @@ class TrendDCAStrategy(BaseStrategy):
         indicators: dict[str, Any],
         position: dict[str, Any],
     ) -> Signal | None:
-        """
-        Check if we should add a DCA safety order.
-
-        DCA is triggered when price drops by a certain percentage from entry.
-        """
+        """Check whether a safety order can be added to the position."""
         symbol = str(candle["symbol"])
         close = Decimal(str(candle["close"]))
         timestamp = candle["open_time"]
         if not isinstance(timestamp, datetime):
             raise TypeError("candle.open_time must be datetime")
 
+        regime = indicators.get("regime")
+        if regime != MarketRegime.TREND_UP:
+            return None
+
         entry_price = Decimal(str(position["entry_price"]))
         current_dca_level = self.dca_levels.get(symbol, 0)
 
-        # Check if we can add more DCA levels
         if current_dca_level >= 3:
             return None
 
-        # Calculate price drop from entry
         price_drop = (entry_price - close) / entry_price
-
-        # DCA levels: 3%, 5%, 8% drops
         dca_thresholds = [
             Decimal("0.03"),
             Decimal("0.05"),
@@ -255,7 +259,6 @@ class TrendDCAStrategy(BaseStrategy):
         if current_dca_level < len(dca_thresholds):
             threshold = dca_thresholds[current_dca_level]
             if price_drop >= threshold:
-                # Calculate DCA quantity based on level
                 dca_pcts = [
                     self.config.safety_order_1_pct,
                     self.config.safety_order_2_pct,
@@ -276,7 +279,9 @@ class TrendDCAStrategy(BaseStrategy):
                     timestamp=timestamp,
                     reason=f"DCA safety order {current_dca_level + 1}",
                     strategy=self.name,
+                    parameters_version=self.config.parameters_version,
                     indicators=indicators,
+                    regime=str(regime),
                     metadata={"dca_level": current_dca_level + 1},
                 )
 

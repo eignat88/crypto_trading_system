@@ -1,8 +1,18 @@
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
 from app.models import Position
+
+
+@dataclass(frozen=True)
+class ExitLevelEvent:
+    """Deterministic intrabar exit detected from candle OHLC."""
+
+    symbol: str
+    reference_price: Decimal
+    reason: str
 
 
 class Portfolio:
@@ -175,13 +185,62 @@ class Portfolio:
         # Record equity
         self.equity_history.append((timestamp, self.total_equity))
 
-    def check_stops(self, prices: dict[str, Decimal]) -> list[str]:
-        """
-        Check stop-loss and take-profit levels.
+    def check_intrabar_exits(
+        self,
+        candles: dict[str, dict[str, Decimal]],
+    ) -> list[ExitLevelEvent]:
+        """Detect stop-loss/take-profit from candle OHLC without future data.
 
-        Returns:
-            List of symbols that should be closed
+        Conservative rules for long spot positions:
+        - ``low <= stop_loss`` triggers the stop.
+        - ``high >= take_profit`` triggers the take-profit.
+        - if both levels are touched in the same candle, stop-loss wins because
+          OHLC does not reveal the intrabar path.
+        - if the candle opens below the stop, the open price is used as the
+          reference price (adverse gap); otherwise the stop level is used.
+        - take-profit uses the configured level as the reference price even on
+          a favorable gap, avoiding optimistic price improvement.
+
+        Slippage is applied later by the execution model.
         """
+        events: list[ExitLevelEvent] = []
+
+        for symbol, position in self.positions.items():
+            candle = candles.get(symbol)
+            if candle is None or position.side != "long":
+                continue
+
+            open_price = candle["open"]
+            high_price = candle["high"]
+            low_price = candle["low"]
+
+            if position.stop_loss is not None and low_price <= position.stop_loss:
+                gap_down = open_price <= position.stop_loss
+                reference_price = open_price if gap_down else position.stop_loss
+                events.append(
+                    ExitLevelEvent(
+                        symbol=symbol,
+                        reference_price=reference_price,
+                        reason="Stop-loss hit on gap" if gap_down else "Stop-loss hit",
+                    )
+                )
+                # Conservative ambiguity rule: stop wins if both levels were
+                # touched in this candle.
+                continue
+
+            if position.take_profit is not None and high_price >= position.take_profit:
+                events.append(
+                    ExitLevelEvent(
+                        symbol=symbol,
+                        reference_price=position.take_profit,
+                        reason="Take-profit hit",
+                    )
+                )
+
+        return events
+
+    def check_stops(self, prices: dict[str, Decimal]) -> list[str]:
+        """Legacy close-price stop/take check kept for compatibility."""
         symbols_to_close = []
 
         for symbol, position in self.positions.items():
@@ -190,12 +249,10 @@ class Portfolio:
 
             current_price = prices[symbol]
 
-            # Check stop-loss
             if position.stop_loss is not None:
                 if position.side == "long" and current_price <= position.stop_loss:
                     symbols_to_close.append(symbol)
 
-            # Check take-profit
             if position.take_profit is not None:
                 if position.side == "long" and current_price >= position.take_profit:
                     symbols_to_close.append(symbol)

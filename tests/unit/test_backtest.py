@@ -58,9 +58,9 @@ class TestPortfolio:
         )
 
         assert pnl is not None
-        assert pnl == Decimal("100")  # (110 - 100) * 10
+        assert pnl == Decimal("100")
         assert not self.portfolio.has_position("BTCUSDT")
-        assert len(self.portfolio.trade_history) == 2  # open + close
+        assert len(self.portfolio.trade_history) == 2
 
     def test_update_positions(self):
         self.portfolio.open_position(
@@ -115,13 +115,83 @@ class TestPortfolio:
             take_profit=Decimal("110"),
         )
 
-        # Check stop-loss
         symbols = self.portfolio.check_stops({"BTCUSDT": Decimal("94")})
         assert "BTCUSDT" in symbols
 
-        # Check take-profit
         symbols = self.portfolio.check_stops({"BTCUSDT": Decimal("111")})
         assert "BTCUSDT" in symbols
+
+    def test_intrabar_stop_uses_low_and_stop_level(self):
+        self.portfolio.open_position(
+            "BTCUSDT", "long", Decimal("100"), Decimal("10"),
+            datetime.now(UTC), stop_loss=Decimal("95"), take_profit=Decimal("110"),
+        )
+
+        events = self.portfolio.check_intrabar_exits({
+            "BTCUSDT": {
+                "open": Decimal("100"),
+                "high": Decimal("105"),
+                "low": Decimal("94"),
+            }
+        })
+
+        assert len(events) == 1
+        assert events[0].reason == "Stop-loss hit"
+        assert events[0].reference_price == Decimal("95")
+
+    def test_intrabar_stop_gap_down_uses_open(self):
+        self.portfolio.open_position(
+            "BTCUSDT", "long", Decimal("100"), Decimal("10"),
+            datetime.now(UTC), stop_loss=Decimal("95"), take_profit=Decimal("110"),
+        )
+
+        events = self.portfolio.check_intrabar_exits({
+            "BTCUSDT": {
+                "open": Decimal("90"),
+                "high": Decimal("96"),
+                "low": Decimal("89"),
+            }
+        })
+
+        assert len(events) == 1
+        assert events[0].reason == "Stop-loss hit on gap"
+        assert events[0].reference_price == Decimal("90")
+
+    def test_intrabar_take_profit_uses_high_and_target_level(self):
+        self.portfolio.open_position(
+            "BTCUSDT", "long", Decimal("100"), Decimal("10"),
+            datetime.now(UTC), stop_loss=Decimal("95"), take_profit=Decimal("110"),
+        )
+
+        events = self.portfolio.check_intrabar_exits({
+            "BTCUSDT": {
+                "open": Decimal("100"),
+                "high": Decimal("111"),
+                "low": Decimal("99"),
+            }
+        })
+
+        assert len(events) == 1
+        assert events[0].reason == "Take-profit hit"
+        assert events[0].reference_price == Decimal("110")
+
+    def test_intrabar_ambiguous_bar_uses_conservative_stop_first(self):
+        self.portfolio.open_position(
+            "BTCUSDT", "long", Decimal("100"), Decimal("10"),
+            datetime.now(UTC), stop_loss=Decimal("95"), take_profit=Decimal("110"),
+        )
+
+        events = self.portfolio.check_intrabar_exits({
+            "BTCUSDT": {
+                "open": Decimal("100"),
+                "high": Decimal("111"),
+                "low": Decimal("94"),
+            }
+        })
+
+        assert len(events) == 1
+        assert events[0].reason == "Stop-loss hit"
+        assert events[0].reference_price == Decimal("95")
 
 
 class TestCommissionModel:
@@ -171,7 +241,6 @@ class TestBacktestEngine:
         )
 
     def test_simple_buy_and_hold(self):
-        # Create simple uptrend data
         candles = []
         base_time = datetime(2024, 1, 1, tzinfo=UTC)
         for i in range(100):
@@ -191,8 +260,7 @@ class TestBacktestEngine:
             return None
 
         result = self.engine.run(candles, buy_and_hold_strategy)
-        assert result.total_trades == 1  # Only the buy
-        # Balance should be different from initial (could be higher or lower depending on slippage)
+        assert result.total_trades == 1
         assert result.portfolio.balance != Decimal("5000")
 
     def test_dataclass_signal_preserves_stop_levels(self):
@@ -230,6 +298,87 @@ class TestBacktestEngine:
         )
         assert engine.portfolio.trade_history == []
 
+    def test_intrabar_stop_executes_from_stop_reference_not_close(self):
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
+        candles = [
+            {
+                "open_time": base_time,
+                "symbol": "BTCUSDT",
+                "open": Decimal("100"),
+                "high": Decimal("101"),
+                "low": Decimal("99"),
+                "close": Decimal("100"),
+                "volume": Decimal("1000"),
+            },
+            {
+                "open_time": base_time + timedelta(hours=1),
+                "symbol": "BTCUSDT",
+                "open": Decimal("100"),
+                "high": Decimal("101"),
+                "low": Decimal("94"),
+                "close": Decimal("100"),
+                "volume": Decimal("1000"),
+            },
+        ]
+
+        def strategy(candle, portfolio, state):
+            if not portfolio.has_position("BTCUSDT"):
+                return Signal(
+                    "open_long", "BTCUSDT", Decimal("100"), Decimal("1"),
+                    candle["open_time"], stop_loss=Decimal("95"), take_profit=Decimal("110"),
+                )
+            return None
+
+        result = self.engine.run(candles, strategy)
+        sell_order = [order for order in result.orders if order.side == "sell"][0]
+        sell_fill = [fill for fill in result.fills if fill.side == "sell"][0]
+
+        assert sell_order.requested_price == Decimal("95")
+        assert sell_fill.price < Decimal("95")
+        assert result.signals[-1].reason == "Stop-loss hit"
+        assert result.signals[-1].parameters_version == "backtest_engine_v1"
+        assert result.total_trades == 1
+
+    def test_intrabar_take_profit_executes_from_target_reference(self):
+        base_time = datetime(2024, 1, 1, tzinfo=UTC)
+        candles = [
+            {
+                "open_time": base_time,
+                "symbol": "BTCUSDT",
+                "open": Decimal("100"),
+                "high": Decimal("101"),
+                "low": Decimal("99"),
+                "close": Decimal("100"),
+                "volume": Decimal("1000"),
+            },
+            {
+                "open_time": base_time + timedelta(hours=1),
+                "symbol": "BTCUSDT",
+                "open": Decimal("100"),
+                "high": Decimal("111"),
+                "low": Decimal("99"),
+                "close": Decimal("100"),
+                "volume": Decimal("1000"),
+            },
+        ]
+
+        def strategy(candle, portfolio, state):
+            if not portfolio.has_position("BTCUSDT"):
+                return Signal(
+                    "open_long", "BTCUSDT", Decimal("100"), Decimal("1"),
+                    candle["open_time"], stop_loss=Decimal("95"), take_profit=Decimal("110"),
+                )
+            return None
+
+        result = self.engine.run(candles, strategy)
+        sell_order = [order for order in result.orders if order.side == "sell"][0]
+        sell_fill = [fill for fill in result.fills if fill.side == "sell"][0]
+
+        assert sell_order.requested_price == Decimal("110")
+        assert sell_fill.price < Decimal("110")
+        assert result.signals[-1].reason == "Take-profit hit"
+        assert result.total_trades == 1
+
     def test_trend_dca_runs_through_risk_orders_and_fills(self):
         base_time = datetime(2024, 1, 1, tzinfo=UTC)
         prices = [Decimal("100"), Decimal("96"), Decimal("92"), Decimal("86"), Decimal("105")]
@@ -261,6 +410,66 @@ class TestBacktestEngine:
         assert all(decision.approved for decision in result.risk_decisions)
         assert sum(fill.price * fill.quantity for fill in buy_fills) <= Decimal("505")
         assert result.total_trades == 1
+        assert all(
+            signal.parameters_version
+            for signal in result.signals
+            if signal.strategy == "TrendDCA"
+        )
+
+    def test_trend_dca_does_not_add_in_range_regime(self):
+        now = datetime(2024, 1, 1, tzinfo=UTC)
+        strategy = TrendDCAStrategy(["BTCUSDT"])
+        strategy.dca_levels["BTCUSDT"] = 0
+
+        signal = strategy.should_add_dca(
+            {
+                "open_time": now,
+                "symbol": "BTCUSDT",
+                "close": Decimal("96"),
+            },
+            {
+                "regime": "RANGE",
+                "rsi": Decimal("30"),
+            },
+            {
+                "entry_price": Decimal("100"),
+                "quantity": Decimal("1"),
+                "capital": Decimal("5000"),
+            },
+        )
+
+        assert signal is None
+
+    def test_trend_dca_exit_signal_has_complete_audit_fields(self):
+        now = datetime(2024, 1, 1, tzinfo=UTC)
+        strategy = TrendDCAStrategy(["BTCUSDT"])
+        indicators = {
+            "regime": "TREND_DOWN",
+            "rsi": Decimal("50"),
+        }
+
+        signal = strategy.should_exit(
+            {
+                "open_time": now,
+                "symbol": "BTCUSDT",
+                "close": Decimal("95"),
+                "high": Decimal("96"),
+                "low": Decimal("94"),
+            },
+            indicators,
+            {
+                "entry_price": Decimal("100"),
+                "quantity": Decimal("1"),
+                "unrealized_pnl_pct": Decimal("-0.05"),
+                "holding_periods": 1,
+            },
+        )
+
+        assert signal is not None
+        assert signal.strategy == "TrendDCA"
+        assert signal.parameters_version == "trend_dca_v1"
+        assert signal.regime == "TREND_DOWN"
+        assert signal.indicators == indicators
 
     def test_short_signal_is_not_supported(self):
         now = datetime.now(UTC)
