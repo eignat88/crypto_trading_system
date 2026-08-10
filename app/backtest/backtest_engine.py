@@ -105,7 +105,38 @@ class BacktestEngine:
             timestamp = self._datetime(candle["open_time"], "open_time")
             symbol = str(candle["symbol"])
             current_price = self._decimal(candle["close"], "close")
+            open_price = self._decimal(candle.get("open", current_price), "open")
             high_price = self._decimal(candle.get("high", current_price), "high")
+            low_price = self._decimal(candle.get("low", current_price), "low")
+
+            closed_by_level = False
+            level_events = self.portfolio.check_intrabar_exits(
+                {
+                    symbol: {
+                        "open": open_price,
+                        "high": high_price,
+                        "low": low_price,
+                    }
+                }
+            )
+            for event in level_events:
+                position = self.portfolio.get_position(event.symbol)
+                if position is None:
+                    continue
+                level_signal = Signal(
+                    action=SignalAction.CLOSE,
+                    symbol=event.symbol,
+                    price=event.reference_price,
+                    quantity=position.quantity,
+                    timestamp=timestamp,
+                    reason=event.reason,
+                    strategy="backtest_engine",
+                    parameters_version="backtest_engine_v1",
+                    metadata={"exit_source": "intrabar_level"},
+                )
+                closed_by_level = (
+                    self._process_signal(level_signal, candle, timestamp) is not None
+                ) or closed_by_level
 
             self.portfolio.update_positions(
                 {symbol: current_price},
@@ -114,23 +145,6 @@ class BacktestEngine:
             )
             self.risk_engine.update_equity(self.portfolio.total_equity)
 
-            closed_by_stop = False
-            for stop_symbol in self.portfolio.check_stops({symbol: current_price}):
-                position = self.portfolio.get_position(stop_symbol)
-                if position is not None:
-                    stop_signal = Signal(
-                        action=SignalAction.CLOSE,
-                        symbol=stop_symbol,
-                        price=current_price,
-                        quantity=position.quantity,
-                        timestamp=timestamp,
-                        reason="Portfolio stop level reached",
-                        strategy="backtest_engine",
-                    )
-                    closed_by_stop = (
-                        self._process_signal(stop_signal, candle, timestamp) is not None
-                    )
-
             indicators = (
                 indicator_provider(candle, index)
                 if indicator_provider is not None
@@ -138,7 +152,7 @@ class BacktestEngine:
             )
             signals = (
                 None
-                if closed_by_stop
+                if closed_by_level
                 else self._strategy_signals(strategy, candle, indicators, state)
             )
             for signal in self._as_signal_list(signals, candle, timestamp):
@@ -168,6 +182,8 @@ class BacktestEngine:
                     timestamp=last_time,
                     reason="End of backtest",
                     strategy="backtest_engine",
+                    parameters_version="backtest_engine_v1",
+                    metadata={"exit_source": "end_of_backtest"},
                 )
                 self._process_signal(close_signal, last_candle, last_time)
 
@@ -439,6 +455,12 @@ class BacktestEngine:
             raise TypeError("Use app.models.Signal for dataclass strategy signals")
         if not isinstance(signal, dict):
             raise TypeError("Strategy signals must be mappings or app.models.Signal")
+        indicators = signal.get("indicators", {})
+        metadata = signal.get("metadata", {})
+        if not isinstance(indicators, dict):
+            raise TypeError("signal.indicators must be a mapping")
+        if not isinstance(metadata, dict):
+            raise TypeError("signal.metadata must be a mapping")
         return Signal(
             action=str(signal["action"]),
             symbol=str(signal.get("symbol", candle["symbol"])),
@@ -448,6 +470,11 @@ class BacktestEngine:
             reason=str(signal.get("reason", "")),
             stop_loss=BacktestEngine._optional_decimal(signal.get("stop_loss")),
             take_profit=BacktestEngine._optional_decimal(signal.get("take_profit")),
+            strategy=str(signal.get("strategy", "")),
+            parameters_version=str(signal.get("parameters_version", "")),
+            indicators=indicators,
+            regime=None if signal.get("regime") is None else str(signal.get("regime")),
+            metadata=metadata,
         )
 
     @staticmethod
