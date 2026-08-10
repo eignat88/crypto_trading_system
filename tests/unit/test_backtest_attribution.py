@@ -55,3 +55,49 @@ def test_reconstruct_rejects_unmatched_sell():
         reconstruct_closed_trades([
             _row(side="sell", quantity="1", price="100", commission="0.1", hour=1, reason="Stop-loss hit")
         ])
+
+
+def test_reconstruct_allows_numeric_38_18_rounding_delta():
+    trades = reconstruct_closed_trades([
+        _row(
+            side="buy",
+            quantity="0.000190492350294829",
+            price="100",
+            commission="0",
+            hour=1,
+            regime="TREND_UP",
+        ),
+        _row(
+            side="sell",
+            quantity="0.000190492350294830",
+            price="110",
+            commission="0",
+            hour=2,
+            reason="Take-profit hit",
+        ),
+    ])
+
+    assert len(trades) == 1
+    assert trades[0].quantity == Decimal("0.000190492350294829")
+
+
+def test_reconstruct_rejects_material_quantity_mismatch():
+    with pytest.raises(ValueError, match="Partial/oversized sell"):
+        reconstruct_closed_trades([
+            _row(
+                side="buy",
+                quantity="0.000190492350294829",
+                price="100",
+                commission="0",
+                hour=1,
+                regime="TREND_UP",
+            ),
+            _row(
+                side="sell",
+                quantity="0.000190492450294829",
+                price="110",
+                commission="0",
+                hour=2,
+                reason="Take-profit hit",
+            ),
+        ])
