@@ -1,0 +1,17 @@
+﻿checked_at_utc;category;check_name;status;actual;expected;evidence_file;details
+2026-07-31T15:17:43.309668+00:00;migrations;migration_first;success;"exit_code=0; marker_found=True";"exit_code=0; output contains 'migration_status=success'";D:\py_pro\crypto_trading_system\logs\readiness_bybit_BTCUSDT_1h_20260731_151742\migration_first.log;
+2026-07-31T15:17:43.309668+00:00;migrations;migration_second;success;"exit_code=0; marker_found=True";"exit_code=0; output contains 'migration_status=success'";D:\py_pro\crypto_trading_system\logs\readiness_bybit_BTCUSDT_1h_20260731_151742\migration_second.log;
+2026-07-31T15:17:43.309668+00:00;tests;integration_tests;blocked;TEST_DATABASE_URL is not set;TEST_DATABASE_URL must point to an isolated database containing 'test';;Integration tests were not started to protect the project database.
+2026-07-31T15:17:43.309668+00:00;raw_to_dds;raw_to_dds_first;blocked;not run;migrations and integration tests succeed;;Flow stopped after: integration-test safety gate.
+2026-07-31T15:17:43.309668+00:00;raw_to_dds;raw_to_dds_repeat;blocked;not run;migrations and integration tests succeed;;Flow stopped after: integration-test safety gate.
+2026-07-31T15:17:43.309668+00:00;database;raw_check;success;"raw=169; duplicates=0; gaps=0; invalid_time=0; invalid_ohlc=0; loading_journal=success";"RAW rows > 0; no duplicates/gaps/invalid rows; latest journal status=success";D:\py_pro\crypto_trading_system\logs\readiness_bybit_BTCUSDT_1h_20260731_151742\database_diagnostics.json;
+2026-07-31T15:17:43.309668+00:00;database;raw_to_dds_journals;success;"previous_run=2:success; latest_run=3:success; latest source=0 inserted=0 rejected=0 deferred=0";"two successful runs; repeat inserted=0, rejected=0, deferred=0";D:\py_pro\crypto_trading_system\logs\readiness_bybit_BTCUSDT_1h_20260731_151742\database_diagnostics.json;
+2026-07-31T15:17:43.309668+00:00;database;checkpoint;success;"last_loaded_at=2026-07-31T12:22:34.827827+00:00; last_run_at=2026-07-31T14:49:09.925645+00:00";checkpoint exists and has timestamps;D:\py_pro\crypto_trading_system\logs\readiness_bybit_BTCUSDT_1h_20260731_151742\database_diagnostics.json;
+2026-07-31T15:17:43.309668+00:00;database;data_quality_events;success;"count=0; latest=";count=0;D:\py_pro\crypto_trading_system\logs\readiness_bybit_BTCUSDT_1h_20260731_151742\database_diagnostics.json;
+2026-07-31T15:17:43.309668+00:00;database;final_database_check;success;"dds_count=169; running_etl=0; status=true";status=success;D:\py_pro\crypto_trading_system\logs\readiness_bybit_BTCUSDT_1h_20260731_151742\database_diagnostics.json;
+2026-07-31T15:17:43.309668+00:00;ci;Ruff;blocked;gh CLI not found;conclusion=success;;
+2026-07-31T15:17:43.309668+00:00;ci;Unit tests;blocked;gh CLI not found;conclusion=success;;
+2026-07-31T15:17:43.309668+00:00;ci;PostgreSQL 17 integration;blocked;gh CLI not found;conclusion=success;;
+2026-07-31T15:17:43.309668+00:00;ci;ci_commit_matches_local;blocked;gh CLI not found;latest completed CI belongs to current HEAD;;
+2026-07-31T15:17:43.309668+00:00;ci;tracked_worktree_clean;blocked;gh CLI not found;no uncommitted changes in tracked files;;
+2026-07-31T15:17:43.309668+00:00;decision;full_history_load;blocked;STOP: full historical load is prohibited;all mandatory checks have status=success;D:\py_pro\crypto_trading_system\logs\readiness_bybit_BTCUSDT_1h_20260731_151742;Do not restart the three-year load. Inspect failed checks and database journals.
