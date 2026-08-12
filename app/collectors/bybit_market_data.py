@@ -72,7 +72,6 @@ class BybitMarketDataCollector:
 
     def _get_instrument_ids(self) -> list[InstrumentId]:
         """Get instrument IDs from settings."""
-        product_type = self._get_product_type()
         symbols = [s.strip() for s in settings.trading_symbols.split(",")]
 
         instrument_ids = []
@@ -127,7 +126,6 @@ class BybitMarketDataCollector:
         """Create a data handler actor."""
         from nautilus_trader.trader.actor import Actor
 
-        instrument_ids = self._get_instrument_ids()
         bar_types = self._get_bar_types()
 
         # Create a simple actor to handle data
@@ -209,4 +207,5 @@ async def run_collector():
 
 if __name__ == "__main__":
     import asyncio
+
     asyncio.run(run_collector())

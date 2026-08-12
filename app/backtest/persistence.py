@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -44,8 +44,9 @@ def _as_utc_datetime(value: datetime | str) -> datetime:
         raise TypeError(f"Expected datetime or ISO string, got {type(value).__name__}")
 
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+
+    return parsed.astimezone(UTC)
 
 
 def _required_metadata(metadata: dict[str, Any], key: str) -> Any:
