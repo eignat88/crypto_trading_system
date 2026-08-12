@@ -1,5 +1,9 @@
 # Роадмэп проекта Crypto Trading System
 
+> Текущий этап: backtest/walk-forward и накопление sealed independent holdout.
+> Performance `Breakout Retest v2` закрыт до `2027-02-06T00:00:00Z`.
+> Paper и live trading заблокированы.
+
 ## Текущее состояние
 
 | Компонент | Статус | Файлы |
@@ -12,11 +16,15 @@
 | Bybit клиент | ✅ Готово | `app/exchange/bybit_client.py` |
 | Сборщик свечей | ✅ Готово | `app/collectors/candle_collector.py` |
 | Сборщик индикаторов | 🚧 Частично | `app/collectors/indicator_collector.py` |
+| Sealed holdout pipeline | ✅ Готово | `scripts/update_holdout_data.py`, `scripts/holdout_validation.py` |
 | Индикаторы (EMA, RSI, ATR) | ✅ Готово | `app/indicators/` |
 | Режим рынка | ✅ Готово | `app/indicators/market_regime.py` |
 | Backtest Engine | ✅ Готово | `app/backtest/`, `app/models/` |
 | Стратегия Trend DCA | ✅ Интегрирована | `app/strategies/trend_dca.py` |
 | Risk Engine | ✅ Готово | `app/risk/risk_engine.py` |
+| Paper Exchange | ⏳ Не начато | `app/exchange/` |
+| Reconciliation | ⏳ Не начато | `app/execution/` |
+| Monitoring/alerts | ⏳ Не начато | `app/monitoring/` |
 | Unit тесты | ✅ Готово | `tests/unit/` |
 
 ---
@@ -27,7 +35,8 @@
 - [x] Создать `app/collectors/indicator_collector.py`
 - [ ] Интегрировать расчёт EMA, RSI, ATR при загрузке свечей
 - [x] Сохранение индикаторов в DDS слой
-- [ ] Инкрементальный пересчёт индикаторов
+- [x] Инкрементальный расчёт недостающих versioned-строк для sealed holdout
+- [ ] Подключить общий инкрементальный пересчёт к основному pipeline
 
 **Результат**: При загрузке свечей автоматически рассчитываются индикаторы
 
@@ -95,6 +104,19 @@
 
 Grid и другие стратегии не входят в текущий MVP. Решение вернуться к ним
 принимается только после walk-forward оценки Trend DCA.
+
+### Независимая валидация Breakout Retest v2 🚧
+
+- [x] Заморозить спецификацию стратегии до открытия выборки
+- [x] Реализовать стратегию и state-machine `FAILURE_WATCH`
+- [x] Зафиксировать holdout `2026-08-10` → `2027-02-06`
+- [x] Запретить performance-метрики до даты разблокировки
+- [x] Добавить инкрементальный RAW → DDS → derived → health pipeline
+- [ ] Накопить полную выборку без gaps, duplicates и reconciliation failures
+- [ ] После разблокировки выполнить одноразовую проверку frozen acceptance gates
+
+**Результат**: до 06.02.2027 разрешён только контроль качества данных; это не
+даёт статуса `PAPER_READY` или `LIVE_READY`.
 
 ---
 

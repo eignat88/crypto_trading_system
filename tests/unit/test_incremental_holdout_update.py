@@ -29,9 +29,12 @@ def _definition() -> HoldoutDefinition:
     )
 
 
-def test_next_collection_start_uses_holdout_start_without_checkpoint():
+def test_fresh_database_collects_fixed_warmup_without_checkpoint():
     definition = _definition()
-    assert update_holdout_data.next_collection_start(definition, None) == definition.period_start
+    assert update_holdout_data.next_collection_start(definition, None) == (
+        definition.period_start
+        - timedelta(hours=update_holdout_data.DERIVED_WARMUP_BARS)
+    )
 
 
 def test_next_collection_start_advances_checkpoint_by_one_interval():
@@ -45,7 +48,10 @@ def test_next_collection_start_advances_checkpoint_by_one_interval():
 def test_next_collection_start_never_moves_before_holdout_start():
     definition = _definition()
     checkpoint = definition.period_start - timedelta(days=10)
-    assert update_holdout_data.next_collection_start(definition, checkpoint) == definition.period_start
+    assert update_holdout_data.next_collection_start(definition, checkpoint) == (
+        definition.period_start
+        - timedelta(hours=update_holdout_data.DERIVED_WARMUP_BARS)
+    )
 
 
 def test_next_collection_start_rejects_naive_checkpoint():
@@ -89,6 +95,54 @@ def test_health_gate_reuses_exact_as_of(monkeypatch, tmp_path):
     assert isinstance(command, list)
     assert "health" in command
     assert "2026-08-12T13:44:29+00:00" in command
+
+
+async def test_raw_to_dds_reuses_exact_as_of(monkeypatch):
+    captured: list[tuple[str, dict[str, object]]] = []
+
+    class FakeResult:
+        class Mappings:
+            @staticmethod
+            def all():
+                return []
+
+        @staticmethod
+        def mappings():
+            return FakeResult.Mappings()
+
+    class FakeTransaction:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+        @staticmethod
+        def begin():
+            return FakeTransaction()
+
+        @staticmethod
+        async def execute(statement, params):
+            captured.append((str(statement), params))
+            return FakeResult()
+
+    monkeypatch.setattr(update_holdout_data, "async_session_factory", FakeSession)
+    as_of = datetime(2026, 8, 12, 13, 44, 29, tzinfo=timezone.utc)
+
+    await update_holdout_data.load_raw_to_dds(_definition(), as_of=as_of)
+
+    assert len(captured) == 2
+    for statement, params in captured:
+        assert ":as_of" in statement
+        assert "clock_timestamp()" not in statement
+        assert params["as_of"] == as_of
 
 
 def test_updater_does_not_import_strategy_or_backtest_engine():
