@@ -9,6 +9,11 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from app.config.model_versions import (
+    EXECUTION_MODEL_VERSION,
+    INDICATOR_MODEL_VERSION,
+    REGIME_MODEL_VERSION,
+)
 from app.reporting.breakout_retest_v1_reproduction import (
     EXPECTED,
     EXPECTED_COMBINED_PNL,
@@ -25,7 +30,18 @@ from app.reporting.breakout_retest_v1_reproduction import (
     build_gate_result,
     reproduce_symbol,
 )
+from app.reporting.reproduction_compatibility import (
+    ReproductionBaseline,
+    check_baseline_compatibility,
+)
 from scripts.run_backtest import load_candles
+
+FROZEN_BASELINE = ReproductionBaseline(
+    indicator_model_version="legacy_pre_versioning_unknown",
+    regime_model_version="legacy_pre_versioning_unknown",
+    execution_model_version="legacy_pre_hardening_unknown",
+    dataset_fingerprint=None,
+)
 
 
 def _json_default(value: Any) -> str:
@@ -36,12 +52,41 @@ def _json_default(value: Any) -> str:
     return str(value)
 
 
+def _assert_baseline_compatible() -> None:
+    current = ReproductionBaseline(
+        indicator_model_version=INDICATOR_MODEL_VERSION,
+        regime_model_version=REGIME_MODEL_VERSION,
+        execution_model_version=EXECUTION_MODEL_VERSION,
+        dataset_fingerprint=None,
+    )
+    compatibility = check_baseline_compatibility(FROZEN_BASELINE, current)
+    if compatibility.compatible:
+        return
+
+    print("BREAKOUT RETEST V1 REPRODUCTION")
+    print("==============================")
+    print("status                : BASELINE_INCOMPATIBLE")
+    print(f"indicator_model       : {INDICATOR_MODEL_VERSION}")
+    print(f"regime_model          : {REGIME_MODEL_VERSION}")
+    print(f"execution_model       : {EXECUTION_MODEL_VERSION}")
+    print("metrics_comparison    : SKIPPED")
+    print("reasons:")
+    for reason in compatibility.reasons:
+        print(f"  - {reason}")
+    raise RuntimeError(
+        "Breakout Retest v1 frozen baseline is incompatible with the current "
+        "versioned dataset/execution model; metrics were not compared"
+    )
+
+
 async def main() -> None:
     parser = argparse.ArgumentParser(
         description="Fail-closed frozen Breakout Retest v1 reproduction gate"
     )
     parser.add_argument("--exchange", default="bybit")
     args = parser.parse_args()
+
+    _assert_baseline_compatible()
 
     reproductions = []
     for symbol in ("BTCUSDT", "ETHUSDT"):
