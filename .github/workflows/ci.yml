@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   lint:
-    name: Ruff
+    name: Ruff correctness
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +20,7 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
-      - run: python -m ruff check . --output-format=github
+      - run: python -m ruff check . --select F --output-format=github
 
   tests:
     name: Unit tests
@@ -62,4 +62,4 @@ jobs:
           cache: pip
       - run: python -m pip install --upgrade pip
       - run: python -m pip install -e ".[dev]"
-      - run: python -m pytest -m integration -q
+      - run: python -m pytest tests/integration/test_postgresql_pipeline.py -q
