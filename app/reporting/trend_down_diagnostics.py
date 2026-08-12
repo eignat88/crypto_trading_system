@@ -324,7 +324,8 @@ async def build_trend_down_diagnostics(
             text(
                 """
                 SELECT run_id, exchange_name, symbol, interval_code,
-                       period_start, period_end, backtest_config
+                       period_start, period_end, backtest_config,
+                       regime_model_version
                 FROM mart.backtest_run
                 WHERE run_id = :run_id
                 """
@@ -363,7 +364,9 @@ async def build_trend_down_diagnostics(
                        mr.regime
                 FROM dds.candle c
                 JOIN dds.instrument i ON i.instrument_id = c.instrument_id
-                LEFT JOIN dds.market_regime mr ON mr.candle_id = c.candle_id
+                LEFT JOIN dds.market_regime mr
+                  ON mr.candle_id = c.candle_id
+                 AND mr.regime_model_version = :regime_model_version
                 WHERE i.exchange_name = :exchange_name
                   AND i.symbol = :symbol
                   AND c.interval_code = :interval_code
@@ -379,6 +382,7 @@ async def build_trend_down_diagnostics(
                 "interval_code": run["interval_code"],
                 "period_start": run["period_start"],
                 "period_end": run["period_end"],
+                "regime_model_version": run["regime_model_version"],
             },
         )
         candle_rows = [dict(row) for row in candle_result.mappings().all()]

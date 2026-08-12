@@ -247,7 +247,12 @@ def summarize_group(group: str, records: list[EntryQualityRecord]) -> EntryQuali
 
 async def build_entry_quality_diagnostics(run_id: UUID, session_factory: async_sessionmaker[AsyncSession] = async_session_factory) -> EntryQualityReport:
     async with session_factory() as session:
-        result = await session.execute(text("SELECT run_id, exchange_name, symbol, interval_code, period_start, period_end FROM mart.backtest_run WHERE run_id=:run_id"), {"run_id": run_id})
+        result = await session.execute(text("""
+            SELECT run_id, exchange_name, symbol, interval_code, period_start, period_end,
+                   indicator_model_version, regime_model_version
+            FROM mart.backtest_run
+            WHERE run_id=:run_id
+        """), {"run_id": run_id})
         run = result.mappings().one_or_none()
         if run is None:
             raise ValueError(f"Backtest run not found: {run_id}")
@@ -265,16 +270,24 @@ async def build_entry_quality_diagnostics(run_id: UUID, session_factory: async_s
                    rsi.indicator_value AS rsi, atr.indicator_value AS atr, vol.indicator_value AS volatility,
                    mr.regime, mr.confidence AS regime_confidence
             FROM dds.candle c JOIN dds.instrument i ON i.instrument_id=c.instrument_id
-            LEFT JOIN dds.indicator e20 ON e20.candle_id=c.candle_id AND e20.indicator_name='EMA' AND e20.indicator_params='{"period": 20}'::jsonb
-            LEFT JOIN dds.indicator e50 ON e50.candle_id=c.candle_id AND e50.indicator_name='EMA' AND e50.indicator_params='{"period": 50}'::jsonb
-            LEFT JOIN dds.indicator e200 ON e200.candle_id=c.candle_id AND e200.indicator_name='EMA' AND e200.indicator_params='{"period": 200}'::jsonb
-            LEFT JOIN dds.indicator rsi ON rsi.candle_id=c.candle_id AND rsi.indicator_name='RSI' AND rsi.indicator_params='{"period": 14}'::jsonb
-            LEFT JOIN dds.indicator atr ON atr.candle_id=c.candle_id AND atr.indicator_name='ATR' AND atr.indicator_params='{"period": 14}'::jsonb
-            LEFT JOIN dds.indicator vol ON vol.candle_id=c.candle_id AND vol.indicator_name='VOLATILITY' AND vol.indicator_params='{"period": 20}'::jsonb
-            LEFT JOIN dds.market_regime mr ON mr.candle_id=c.candle_id
+            LEFT JOIN dds.indicator e20 ON e20.candle_id=c.candle_id AND e20.indicator_name='EMA' AND e20.indicator_params='{"period": 20}'::jsonb AND e20.model_version=:indicator_model_version
+            LEFT JOIN dds.indicator e50 ON e50.candle_id=c.candle_id AND e50.indicator_name='EMA' AND e50.indicator_params='{"period": 50}'::jsonb AND e50.model_version=:indicator_model_version
+            LEFT JOIN dds.indicator e200 ON e200.candle_id=c.candle_id AND e200.indicator_name='EMA' AND e200.indicator_params='{"period": 200}'::jsonb AND e200.model_version=:indicator_model_version
+            LEFT JOIN dds.indicator rsi ON rsi.candle_id=c.candle_id AND rsi.indicator_name='RSI' AND rsi.indicator_params='{"period": 14}'::jsonb AND rsi.model_version=:indicator_model_version
+            LEFT JOIN dds.indicator atr ON atr.candle_id=c.candle_id AND atr.indicator_name='ATR' AND atr.indicator_params='{"period": 14}'::jsonb AND atr.model_version=:indicator_model_version
+            LEFT JOIN dds.indicator vol ON vol.candle_id=c.candle_id AND vol.indicator_name='VOLATILITY' AND vol.indicator_params='{"period": 20}'::jsonb AND vol.model_version=:indicator_model_version
+            LEFT JOIN dds.market_regime mr ON mr.candle_id=c.candle_id AND mr.regime_model_version=:regime_model_version
             WHERE i.exchange_name=:exchange AND i.symbol=:symbol AND c.interval_code=:interval
               AND c.open_time>=:start AND c.open_time<:end AND c.is_valid=true ORDER BY c.open_time
-        """), {"exchange": run["exchange_name"], "symbol": run["symbol"], "interval": run["interval_code"], "start": run["period_start"], "end": run["period_end"]})
+        """), {
+            "exchange": run["exchange_name"],
+            "symbol": run["symbol"],
+            "interval": run["interval_code"],
+            "start": run["period_start"],
+            "end": run["period_end"],
+            "indicator_model_version": run["indicator_model_version"],
+            "regime_model_version": run["regime_model_version"],
+        })
         candle_rows = [dict(r) for r in candles.mappings().all()]
     records = reconstruct_entry_quality(run_id=run_id, symbol=str(run["symbol"]), fill_rows=fill_rows, candle_rows=candle_rows)
     return EntryQualityReport(
