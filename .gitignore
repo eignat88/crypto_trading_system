@@ -79,3 +79,9 @@ logs/readiness_*
 
 # Local backtest artifacts
 artifacts/backtests/
+
+# Generated local diagnostics and analysis outputs
+artifacts/diagnostics/
+artifacts/engineering/
+artifacts/walk_forward/
+indicator_audit_source.txt
