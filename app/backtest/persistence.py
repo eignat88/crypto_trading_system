@@ -45,12 +45,18 @@ def _as_utc_datetime(value: datetime | str) -> datetime:
 
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=timezone.utc)
-
     return parsed.astimezone(timezone.utc)
 
 
+def _required_metadata(metadata: dict[str, Any], key: str) -> Any:
+    value = metadata.get(key)
+    if value is None or value == "":
+        raise ValueError(f"Backtest metadata requires {key}")
+    return value
+
+
 def build_run_fingerprint(payload: dict[str, Any]) -> str:
-    """Build a deterministic fingerprint from reproducibility inputs only."""
+    """Build a deterministic fingerprint from all reproducibility inputs."""
     metadata = payload["metadata"]
     reproducibility_inputs = {
         "git_commit": metadata.get("git_commit"),
@@ -61,6 +67,10 @@ def build_run_fingerprint(payload: dict[str, Any]) -> str:
         "end": metadata["end"],
         "candle_count": metadata["candle_count"],
         "random_seed": metadata["random_seed"],
+        "dataset_fingerprint": _required_metadata(metadata, "dataset_fingerprint"),
+        "indicator_model_version": _required_metadata(metadata, "indicator_model_version"),
+        "regime_model_version": _required_metadata(metadata, "regime_model_version"),
+        "execution_model_version": _required_metadata(metadata, "execution_model_version"),
         "strategy": payload["strategy"],
         "configuration": payload["configuration"],
     }
@@ -76,12 +86,7 @@ async def persist_backtest_audit(
     audit_file: str | None,
     session_factory: async_sessionmaker[AsyncSession] = async_session_factory,
 ) -> UUID:
-    """Persist a complete backtest audit in one transaction.
-
-    Re-running the exact same reproducibility inputs produces the same run_id.
-    Child rows use (run_id, sequence_no) keys and ON CONFLICT DO NOTHING, making
-    persistence safe to retry after a process-level retry.
-    """
+    """Persist a complete versioned backtest audit in one transaction."""
     fingerprint = build_run_fingerprint(payload)
     run_id = run_id_from_fingerprint(fingerprint)
     metadata = payload["metadata"]
@@ -95,15 +100,20 @@ async def persist_backtest_audit(
             run_id, run_fingerprint, created_at, git_commit,
             exchange_name, symbol, interval_code, period_start, period_end,
             candle_count, random_seed, strategy_name, parameters_version,
-            strategy_parameters, backtest_config, initial_balance, final_equity,
-            total_pnl, total_trades, winning_trades, losing_trades, win_rate,
-            profit_factor, average_trade, average_win, average_loss,
+            strategy_parameters, backtest_config,
+            dataset_fingerprint, indicator_model_version, regime_model_version,
+            execution_model_version,
+            initial_balance, final_equity, total_pnl, total_trades,
+            winning_trades, losing_trades, win_rate, profit_factor,
+            average_trade, average_win, average_loss,
             max_drawdown, max_consecutive_losses, audit_file
         ) VALUES (
             :run_id, :run_fingerprint, :created_at, :git_commit,
             :exchange_name, :symbol, :interval_code, :period_start, :period_end,
             :candle_count, :random_seed, :strategy_name, :parameters_version,
             CAST(:strategy_parameters AS jsonb), CAST(:backtest_config AS jsonb),
+            :dataset_fingerprint, :indicator_model_version, :regime_model_version,
+            :execution_model_version,
             :initial_balance, :final_equity, :total_pnl, :total_trades,
             :winning_trades, :losing_trades, :win_rate, :profit_factor,
             :average_trade, :average_win, :average_loss, :max_drawdown,
@@ -238,6 +248,10 @@ async def persist_backtest_audit(
         "parameters_version": strategy["parameters"]["parameters_version"],
         "strategy_parameters": _json_dumps(strategy["parameters"]),
         "backtest_config": _json_dumps(payload["configuration"]),
+        "dataset_fingerprint": _required_metadata(metadata, "dataset_fingerprint"),
+        "indicator_model_version": _required_metadata(metadata, "indicator_model_version"),
+        "regime_model_version": _required_metadata(metadata, "regime_model_version"),
+        "execution_model_version": _required_metadata(metadata, "execution_model_version"),
         "initial_balance": backtest["initial_balance"],
         "final_equity": backtest["final_equity"],
         "total_pnl": backtest["total_pnl"],
