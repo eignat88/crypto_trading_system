@@ -100,6 +100,7 @@ DECLARE
     v_checkpoint timestamptz;
     v_last_run timestamptz;
     v_upper_loaded_at timestamptz;
+    v_ingestion_cutoff timestamptz := clock_timestamp();
 BEGIN
     IF p_as_of IS NULL THEN
         RAISE EXCEPTION 'p_as_of must not be NULL';
@@ -132,13 +133,16 @@ BEGIN
           AND c.interval_code = v_stream.interval_code
         FOR UPDATE;
 
+        -- p_as_of is an event-time cutoff. RAW ingestion may happen after that
+        -- replay timestamp, so checkpoint progression is bounded by the DB time
+        -- captured at function start instead of by p_as_of.
         SELECT COALESCE(max(r.loaded_at), v_checkpoint)
           INTO v_upper_loaded_at
         FROM raw_market.candles r
         WHERE r.exchange_name = v_stream.exchange_name
           AND r.symbol = v_stream.symbol
           AND r.interval_code = v_stream.interval_code
-          AND r.loaded_at <= p_as_of;
+          AND r.loaded_at <= v_ingestion_cutoff;
 
         INSERT INTO dds.etl_run (
             exchange_name, symbol, interval_code, as_of, status
@@ -244,4 +248,4 @@ END;
 $$;
 
 COMMENT ON FUNCTION dds.load_raw_candles(text, text, text, timestamptz) IS
-'Loads valid closed RAW candles idempotently; rejects invalid rows into data_quality_event and returns per-stream counts.';
+'Loads valid closed RAW candles idempotently; p_as_of is an event-time cutoff while RAW ingestion progress uses a function-start DB-time cutoff.';

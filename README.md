@@ -2,6 +2,21 @@
 
 Automated cryptocurrency trading system with NautilusTrader integration.
 
+## Current Status
+
+The project is in the backtest/walk-forward and sealed independent-validation
+phase. The prospective `Breakout Retest v2` holdout covers BTCUSDT and ETHUSDT
+1h candles from 2026-08-10 and remains performance-sealed until
+2027-02-06T00:00:00Z.
+
+- RAW -> DDS, versioned indicators/regimes, backtest, Risk Engine and CI are implemented.
+- `scripts/update_holdout_data.py` maintains only closed holdout candles and data health.
+- Paper Exchange, restart recovery, reconciliation and production monitoring are not implemented.
+- Paper and live trading remain blocked.
+
+Do not run strategy performance against the prospective holdout before its
+configured unlock time.
+
 ## Requirements
 
 - Python 3.12+

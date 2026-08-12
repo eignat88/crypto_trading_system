@@ -35,6 +35,10 @@ from app.reporting.holdout_validation import (  # noqa: E402
 
 DEFAULT_DEFINITION = Path("config/validation/breakout_retest_v2_holdout.json")
 HEALTH_SCRIPT = Path("scripts/holdout_validation.py")
+# EMA-200 becomes available after 200 observations. The regime model uses a
+# 10-value EMA-200 slope, so the first holdout candle needs 208 completed
+# candles before it (indices 0..208 make both values available at index 208).
+DERIVED_WARMUP_BARS = 208
 
 
 def parse_args() -> argparse.Namespace:
@@ -67,10 +71,11 @@ def next_collection_start(
     checkpoint: datetime | None,
 ) -> datetime:
     """Return the first candle open_time not covered by a successful checkpoint."""
-    if checkpoint is None:
-        return definition.period_start
     duration = interval_duration(definition.interval)
-    return max(definition.period_start, _utc(checkpoint) + duration)
+    warmup_start = definition.period_start - duration * DERIVED_WARMUP_BARS
+    if checkpoint is None:
+        return warmup_start
+    return max(warmup_start, _utc(checkpoint) + duration)
 
 
 async def collect_closed_raw(
@@ -111,8 +116,13 @@ async def collect_closed_raw(
     return loaded
 
 
-async def load_raw_to_dds(definition: HoldoutDefinition) -> dict[str, int]:
+async def load_raw_to_dds(
+    definition: HoldoutDefinition,
+    *,
+    as_of: datetime,
+) -> dict[str, int]:
     """Run the existing idempotent RAW -> DDS function per holdout symbol."""
+    cutoff = _utc(as_of)
     inserted: dict[str, int] = {}
     for symbol in definition.symbols:
         async with async_session_factory() as session, session.begin():
@@ -120,7 +130,7 @@ async def load_raw_to_dds(definition: HoldoutDefinition) -> dict[str, int]:
                 text(
                     """
                     SELECT * FROM dds.load_raw_candles(
-                        :exchange, :symbol, :interval, clock_timestamp()
+                        :exchange, :symbol, :interval, :as_of
                     )
                     """
                 ),
@@ -128,6 +138,7 @@ async def load_raw_to_dds(definition: HoldoutDefinition) -> dict[str, int]:
                     "exchange": definition.exchange,
                     "symbol": symbol,
                     "interval": definition.interval,
+                    "as_of": cutoff,
                 },
             )
             rows = result.mappings().all()
@@ -215,7 +226,7 @@ async def main() -> None:
     print()
 
     await collect_closed_raw(definition, as_of=as_of)
-    await load_raw_to_dds(definition)
+    await load_raw_to_dds(definition, as_of=as_of)
     await calculate_missing_derived(definition, as_of=as_of)
 
     print()
