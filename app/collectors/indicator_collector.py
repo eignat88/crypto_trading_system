@@ -25,28 +25,16 @@ class IndicatorCollector:
         symbol: str,
         interval: str,
     ) -> int:
-        """
-        Calculate indicators for all candles of a symbol/interval.
-
-        Args:
-            symbol: Trading pair symbol
-            interval: Time interval
-
-        Returns:
-            Number of candles processed
-        """
+        """Calculate and store indicators for all valid candles."""
         async with async_session_factory() as session:
-            # Get instrument_id
             instrument_id = await self._get_instrument_id(session, symbol)
             if instrument_id is None:
                 logger.warning("instrument_not_found", symbol=symbol)
                 return 0
 
-            # Get candles that need indicators
             candles = await self._get_candles_for_indicators(
                 session, instrument_id, interval
             )
-
             if not candles:
                 logger.info("no_candles_for_indicators", symbol=symbol, interval=interval)
                 return 0
@@ -58,74 +46,67 @@ class IndicatorCollector:
                 candles=len(candles),
             )
 
-            # Extract price data
             closes = [Decimal(str(c["close_price"])) for c in candles]
             highs = [Decimal(str(c["high_price"])) for c in candles]
             lows = [Decimal(str(c["low_price"])) for c in candles]
 
-            # Pre-calculate EMA series.
-            # Each value at index i only depends on prices [0:i+1],
-            # therefore this does not introduce look-ahead bias.
             ema_20_series = calculate_ema_series(closes, 20)
             ema_50_series = calculate_ema_series(closes, 50)
             ema_200_series = calculate_ema_series(closes, 200)
 
-            # Calculate indicators for each candle
             processed = 0
             for i, candle in enumerate(candles):
                 candle_id = candle["candle_id"]
-
-                # Get historical data up to this candle
                 historical_closes = closes[: i + 1]
                 historical_highs = highs[: i + 1]
                 historical_lows = lows[: i + 1]
 
-                # Calculate EMA 20
                 ema_20 = ema_20_series[i]
                 if ema_20 is not None:
                     await self._store_indicator(
                         session, candle_id, "EMA", ema_20, {"period": 20}
                     )
 
-                # Calculate EMA 50
                 ema_50 = ema_50_series[i]
                 if ema_50 is not None:
                     await self._store_indicator(
                         session, candle_id, "EMA", ema_50, {"period": 50}
                     )
 
-                # Calculate EMA 200
                 ema_200 = ema_200_series[i]
                 if ema_200 is not None:
                     await self._store_indicator(
                         session, candle_id, "EMA", ema_200, {"period": 200}
                     )
 
-                # Calculate RSI 14
                 rsi = calculate_rsi(historical_closes, 14)
                 if rsi is not None:
                     await self._store_indicator(
                         session, candle_id, "RSI", rsi, {"period": 14}
                     )
 
-                # Calculate ATR 14
                 atr = calculate_atr(historical_highs, historical_lows, historical_closes, 14)
                 if atr is not None:
                     await self._store_indicator(
                         session, candle_id, "ATR", atr, {"period": 14}
                     )
 
-                # Calculate Historical Volatility
-                volatility = calculate_historical_volatility(historical_closes, 20)
+                volatility = calculate_historical_volatility(
+                    historical_closes,
+                    20,
+                    timeframe=interval,
+                )
                 if volatility is not None:
                     await self._store_indicator(
                         session, candle_id, "VOLATILITY", volatility, {"period": 20}
                     )
 
-                # Calculate Market Regime
                 if len(historical_closes) >= 200:
                     regime_result = self.regime_detector.detect(
-                        historical_closes, historical_highs, historical_lows
+                        historical_closes,
+                        historical_highs,
+                        historical_lows,
+                        timeframe=interval,
                     )
                     await self._store_regime(
                         session,
@@ -141,20 +122,17 @@ class IndicatorCollector:
                     )
 
                 processed += 1
-
                 if processed % 100 == 0:
                     await session.commit()
                     logger.info("indicators_progress", processed=processed, total=len(candles))
 
             await session.commit()
-
             logger.info(
                 "indicators_completed",
                 symbol=symbol,
                 interval=interval,
                 processed=processed,
             )
-
             return processed
 
     async def _get_instrument_id(
@@ -180,7 +158,7 @@ class IndicatorCollector:
         instrument_id: int,
         interval: str,
     ) -> list[dict]:
-        """Get candles that need indicators calculated."""
+        """Get valid candles ordered from oldest to newest."""
         result = await session.execute(
             text(
                 """
@@ -204,7 +182,7 @@ class IndicatorCollector:
         value: Decimal,
         params: dict,
     ):
-        """Store a calculated indicator."""
+        """Store a calculated indicator idempotently."""
         import json
 
         await session.execute(
@@ -239,7 +217,7 @@ class IndicatorCollector:
         atr_percentage: Decimal | None,
         volatility: Decimal | None,
     ):
-        """Store market regime."""
+        """Store market regime idempotently."""
         import json
 
         await session.execute(

@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     trading_mode: TradingMode = TradingMode.PAPER
 
     # Bybit Configuration
-    bybit_environment: str = Field(default="demo", description="Bybit environment: demo, testnet, mainnet")
+    bybit_environment: str = Field(
+        default="demo",
+        description="Bybit environment: demo, testnet, mainnet",
+    )
     trading_symbols: str = Field(default="BTCUSDT-SPOT,ETHUSDT-SPOT", description="Trading symbols")
 
     # Exchange API (for future live trading)

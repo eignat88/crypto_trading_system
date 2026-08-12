@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-import psycopg2
+import psycopg
 import pytest
 
 pytestmark = pytest.mark.integration
@@ -18,7 +18,7 @@ MIGRATIONS = sorted((PROJECT_ROOT / "sql").glob("[0-9][0-9][0-9]_*.sql"))
 def connect():
     if not DATABASE_URL:
         pytest.skip("TEST_DATABASE_URL is not configured")
-    return psycopg2.connect(DATABASE_URL)
+    return psycopg.connect(DATABASE_URL)
 
 
 def apply_all_migrations(connection) -> None:
