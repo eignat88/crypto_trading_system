@@ -1,0 +1,59 @@
+{
+  "metadata": {
+    "created_at": "2026-08-12T12:06:39.625620+00:00",
+    "git_commit": "39fa4d99eb28e319eb70bef3f455190a97ae52d7",
+    "purpose": "engineering reproducibility only; not strategy performance validation",
+    "independent_validation_opened": false
+  },
+  "baseline": {
+    "strategy_name": "BreakoutRetest",
+    "parameters_version": "breakout_retest_v1",
+    "interval": "1h",
+    "period_start": "2024-08-10T00:00:00+00:00",
+    "period_end": "2026-08-10T00:00:00+00:00",
+    "random_seed": 42,
+    "indicator_model_version": "indicators_v2_hourly_volatility",
+    "regime_model_version": "regime_v2_hourly_volatility",
+    "execution_model_version": "backtest_hardened_v1",
+    "symbols": [
+      {
+        "symbol": "BTCUSDT",
+        "candle_count": 17520,
+        "dataset_fingerprint": "a1e008767304220e38999ab0242a554c6bc3b8110105445c4a79d71a3afc517b",
+        "total_trades": 49,
+        "total_pnl": "-0.3309820921039760489215972889",
+        "profitable_windows": 5,
+        "audit_fingerprints": [
+          "3379ba0d7720780133e025d46b4633488289a6fa48aafbc83f4f1f5e6f1c4270",
+          "328449305572dfbcaab636beb77d2f17ec0c2b48c1496389bbf9514538cb97a9",
+          "65472a85f21677a957401d77b58c4c86a6d2e748d18b075d9b47637dd5c9b5af",
+          "859220b7fd0b26100a09102f4e55fe02a169960e9b18c0cdfaf43487181aab52",
+          "df1b4cb58f06b2f79605d046c4b2d7b188d23f82b293a64063d25fac6ea02497",
+          "533b180fff77f4eeb5028799bb9dd4a0e5734a277093214e39990e3591f651df",
+          "a4f6dc6eed507e813ca04405a7f4b8b1ee155d5419321b4d3a80c9ffe972403c",
+          "26a95544091ae0a55910c12b691683cb239ac4e3866df28109be60b7fd482343",
+          "93a96d960478adc4fee8c335b3574a6ca6ab928fc0d2834c36139bf7e40b01a5"
+        ]
+      },
+      {
+        "symbol": "ETHUSDT",
+        "candle_count": 17520,
+        "dataset_fingerprint": "55d6b5be18ae5bb1b637b6b77d5b20047cbf67a47247221faf160cbb1436833d",
+        "total_trades": 63,
+        "total_pnl": "-4.595909469374553949106403447",
+        "profitable_windows": 3,
+        "audit_fingerprints": [
+          "441523a6c21b6e28bc1b798e247ee95067cfa06a17f802cacc5bdbfebbd38775",
+          "11036cdeaa27b7c20a45278d3ec71cbb8707ebf9c25aafa53b2305f18314fd2b",
+          "7cf486627c525094ceb18ff957e4855b40fca4f65a5dfeecdb882b4ee64f9050",
+          "815bc17b25bed3072d0039d5d3ac86f7cbee74b62ca41d87ee926c851a15d7e6",
+          "784911e0d685781a5fcfe3fe443aed35559e532ec025668636f509cf4a2ecffc",
+          "b33214945712dc8163edca8dfd646ff62f141a2bd3287b62025e4e1969b78ed6",
+          "aaa0101aa14350b6f419c27fc66fba371ba520e22243b9935517d55d4a3eee7f",
+          "c38f87110b81932cd5ebcd3f974cd04403fdd6dac0e60636dc6d612d236931e0",
+          "fc9d8a69cdc9ece6b506b06f7402d5b521516e409de10b36ab9c7ad57ed0a266"
+        ]
+      }
+    ]
+  }
+}
