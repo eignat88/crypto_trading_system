@@ -64,7 +64,7 @@ def test_completed_holdout_blocks_when_data_has_gap():
 
 
 def test_completed_healthy_holdout_blocks_unimplemented_strategy():
-    spec = load_holdout_spec(SPEC_PATH)
+    spec = replace(load_holdout_spec(SPEC_PATH), implementation_status="not_implemented")
     now = spec.period_end
     health = tuple(_healthy(symbol, 4320) for symbol in spec.symbols)
     status = assess_holdout(spec, now=now, symbol_health=health)
