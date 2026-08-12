@@ -31,6 +31,13 @@ class BacktestConfig:
     commission_config: CommissionConfig = field(default_factory=CommissionConfig)
     slippage_config: SlippageConfig = field(default_factory=SlippageConfig)
     random_seed: int = 42
+    end_position_policy: str = "liquidate"
+
+    def __post_init__(self) -> None:
+        if self.end_position_policy not in {"liquidate", "mark_to_market"}:
+            raise ValueError(
+                "end_position_policy must be 'liquidate' or 'mark_to_market'"
+            )
 
 
 @dataclass
@@ -93,6 +100,9 @@ class BacktestEngine:
         immediately before simulated fill. A signal produced on the final candle
         therefore remains in the audit without an order/fill.
 
+        Volume impact uses only volume from already completed candles, never the
+        execution candle's final volume. This keeps the execution model causal.
+
         Engine-owned intrabar SL/TP exits are different: they are generated from
         the current candle OHLC and execute from their deterministic reference
         level (with conservative ambiguity rules in ``Portfolio``).
@@ -105,6 +115,7 @@ class BacktestEngine:
             "backtest_started",
             candles=len(candles),
             initial_balance=self.config.initial_balance,
+            end_position_policy=self.config.end_position_policy,
         )
 
         for index, candle in enumerate(candles):
@@ -120,10 +131,16 @@ class BacktestEngine:
             signals_to_execute = pending_signals
             pending_signals = []
             for pending_signal in signals_to_execute:
+                average_volume = self._average_completed_volume(
+                    candles,
+                    index,
+                    pending_signal.symbol,
+                )
                 fill = self._execute_pending_signal(
                     pending_signal,
                     open_price=open_price,
                     execution_time=timestamp,
+                    average_volume=average_volume,
                 )
                 if fill is not None and isinstance(strategy, BaseStrategy):
                     strategy.on_fill(pending_signal, fill)
@@ -156,8 +173,19 @@ class BacktestEngine:
                     parameters_version="backtest_engine_v1",
                     metadata={"exit_source": "intrabar_level"},
                 )
+                average_volume = self._average_completed_volume(
+                    candles,
+                    index,
+                    event.symbol,
+                )
                 closed_by_level = (
-                    self._process_signal(level_signal, candle, timestamp) is not None
+                    self._process_signal(
+                        level_signal,
+                        candle,
+                        timestamp,
+                        average_volume=average_volume,
+                    )
+                    is not None
                 ) or closed_by_level
 
             self.portfolio.update_positions(
@@ -188,9 +216,8 @@ class BacktestEngine:
             self.portfolio.max_drawdown = max(self.portfolio.max_drawdown, drawdown)
 
         # Do not execute pending strategy signals from the final candle: there
-        # is no N+1 open. Any existing position is liquidated explicitly by the
-        # engine at the final close so the result has no hidden open exposure.
-        if candles:
+        # is no N+1 open. Existing positions follow an explicit end policy.
+        if candles and self.config.end_position_policy == "liquidate":
             last_candle = candles[-1]
             last_price = self._decimal(last_candle["close"], "close")
             last_time = self._datetime(last_candle["open_time"], "open_time")
@@ -206,7 +233,17 @@ class BacktestEngine:
                     parameters_version="backtest_engine_v1",
                     metadata={"exit_source": "end_of_backtest"},
                 )
-                self._process_signal(close_signal, last_candle, last_time)
+                average_volume = self._average_completed_volume(
+                    candles,
+                    len(candles),
+                    symbol,
+                )
+                self._process_signal(
+                    close_signal,
+                    last_candle,
+                    last_time,
+                    average_volume=average_volume,
+                )
 
         result = self._calculate_results()
         logger.info(
@@ -215,6 +252,7 @@ class BacktestEngine:
             win_rate=result.win_rate,
             total_pnl=result.total_pnl,
             max_drawdown=result.max_drawdown,
+            open_positions=len(result.portfolio.positions),
         )
         return result
 
@@ -267,12 +305,14 @@ class BacktestEngine:
         signal: Signal,
         open_price: Decimal,
         execution_time: datetime,
+        average_volume: Decimal | None = None,
     ) -> Fill | None:
         """Execute an already-audited strategy signal at the next bar open."""
         return self._create_and_execute_order(
             signal,
             requested_price=open_price,
             timestamp=execution_time,
+            average_volume=average_volume,
         )
 
     def _process_signal(
@@ -280,6 +320,7 @@ class BacktestEngine:
         signal: Signal | dict[str, Any],
         candle: dict[str, Any],
         timestamp: datetime,
+        average_volume: Decimal | None = None,
     ) -> Fill | None:
         """Execute an immediate engine-owned signal.
 
@@ -293,6 +334,7 @@ class BacktestEngine:
             normalized,
             requested_price=normalized.price,
             timestamp=timestamp,
+            average_volume=average_volume,
         )
 
     def _create_and_execute_order(
@@ -300,6 +342,7 @@ class BacktestEngine:
         signal: Signal,
         requested_price: Decimal,
         timestamp: datetime,
+        average_volume: Decimal | None = None,
     ) -> Fill | None:
         action = SignalAction(str(signal.action))
         side = "buy" if action in {SignalAction.BUY, SignalAction.OPEN_LONG} else "sell"
@@ -329,12 +372,17 @@ class BacktestEngine:
             created_at=timestamp,
         )
         self.orders.append(order)
-        return self._execute_order(order)
+        return self._execute_order(order, average_volume=average_volume)
 
-    def _execute_order(self, order: Order) -> Fill | None:
+    def _execute_order(
+        self,
+        order: Order,
+        average_volume: Decimal | None = None,
+    ) -> Fill | None:
         execution_price = self.slippage_model.calculate_slippage(
             order.requested_price,
             order.quantity,
+            average_volume=average_volume,
             is_buy=order.side == "buy",
         )
         # Risk is evaluated against the next-open execution candidate, directly
@@ -355,6 +403,7 @@ class BacktestEngine:
             execution_price = self.slippage_model.calculate_slippage(
                 adjusted_order.requested_price,
                 adjusted_order.quantity,
+                average_volume=average_volume,
                 is_buy=adjusted_order.side == "buy",
             )
             risk_result = self._check_risk(adjusted_order, execution_price)
@@ -453,6 +502,7 @@ class BacktestEngine:
             fills=list(self.fills),
         )
         result.total_trades = len(close_trades)
+        result.max_drawdown = self.portfolio.max_drawdown
         if not close_trades:
             return result
 
@@ -481,7 +531,6 @@ class BacktestEngine:
                 result.max_consecutive_losses,
                 consecutive_losses,
             )
-        result.max_drawdown = self.portfolio.max_drawdown
         return result
 
     @staticmethod
@@ -536,6 +585,41 @@ class BacktestEngine:
         if not isinstance(indicators, dict):
             raise TypeError("candle.indicators must be a mapping")
         return indicators
+
+    @staticmethod
+    def _average_completed_volume(
+        candles: list[dict[str, Any]],
+        index: int,
+        symbol: str,
+        lookback: int = 20,
+    ) -> Decimal | None:
+        """Average only already completed candle volumes for causal slippage.
+
+        ``index`` is the current execution-candle index. The candle at ``index``
+        is deliberately excluded because its final volume is not known at open.
+        Passing ``len(candles)`` is valid for end-of-backtest liquidation, where
+        every candle is already complete.
+        """
+        if lookback <= 0:
+            raise ValueError("lookback must be positive")
+
+        volumes: list[Decimal] = []
+        for candle in reversed(candles[:index]):
+            if str(candle.get("symbol")) != symbol:
+                continue
+            raw_volume = candle.get("volume")
+            if raw_volume is None:
+                continue
+            volume = BacktestEngine._decimal(raw_volume, "volume")
+            if volume <= 0:
+                continue
+            volumes.append(volume)
+            if len(volumes) >= lookback:
+                break
+
+        if not volumes:
+            return None
+        return sum(volumes, Decimal("0")) / Decimal(len(volumes))
 
     def _next_id(self, prefix: str) -> str:
         self._sequence += 1

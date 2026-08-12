@@ -27,8 +27,8 @@ class SlippageModel:
         seed: int | None = None,
     ) -> None:
         self.config = config or SlippageConfig()
-        if seed is not None:
-            random.seed(seed)
+        # Keep deterministic backtests isolated from process-global random state.
+        self._rng = random.Random(seed)
 
     def calculate_slippage(
         self,
@@ -43,7 +43,7 @@ class SlippageModel:
         Args:
             price: Reference price (e.g., close price)
             quantity: Trade quantity
-            average_volume: Average volume for volume-based slippage
+            average_volume: Causal average completed-candle volume for volume impact
             is_buy: True if buying (slippage increases price)
 
         Returns:
@@ -55,15 +55,17 @@ class SlippageModel:
         # Random slippage
         if self.config.random_slippage_max > self.config.random_slippage_min:
             random_pct = Decimal(
-                str(random.uniform(
-                    float(self.config.random_slippage_min),
-                    float(self.config.random_slippage_max),
-                ))
+                str(
+                    self._rng.uniform(
+                        float(self.config.random_slippage_min),
+                        float(self.config.random_slippage_max),
+                    )
+                )
             )
             slippage += random_pct
 
         # Volume-based slippage
-        if average_volume and average_volume > 0:
+        if average_volume is not None and average_volume > 0:
             volume_ratio = quantity / average_volume
             if volume_ratio > self.config.volume_impact_threshold:
                 excess_ratio = (
