@@ -1,0 +1,31 @@
+{
+  "name": "breakout_retest_v2_independent_holdout",
+  "purpose": "independent validation holdout; data health may be inspected before open, strategy performance must remain sealed until the holdout ends",
+  "strategy_name": "BreakoutRetestV2",
+  "strategy_spec_version": "breakout_retest_v2_frozen_spec_20260810",
+  "implementation_status": "not_implemented",
+  "symbols": ["BTCUSDT", "ETHUSDT"],
+  "exchange": "bybit",
+  "interval": "1h",
+  "period_start": "2026-08-10T00:00:00+00:00",
+  "period_end": "2027-02-06T00:00:00+00:00",
+  "expected_candles_per_symbol": 4320,
+  "indicator_model_version": "indicators_v2_hourly_volatility",
+  "regime_model_version": "regime_v2_hourly_volatility",
+  "execution_model_version": "backtest_hardened_v1",
+  "performance_sealed_until_period_end": true,
+  "frozen_rules": {
+    "position_state_flow": ["NORMAL_POSITION", "FAILURE_WATCH", "RECOVERY_OR_CLOSE"],
+    "failure_min_position_age_bars": 24,
+    "failure_condition": "close < EMA20 AND close < EMA50 AND close < breakout_level",
+    "watch_starts": "next completed candle after failure detection",
+    "watch_max_bars": 24,
+    "recovery_condition": "close >= EMA20 AND close >= EMA50 AND close >= breakout_level",
+    "recovery_precedes_timeout_on_same_bar": true,
+    "watch_episodes_per_position": 1,
+    "timeout_action": "CLOSE at signal-bar close; execute on N+1 open",
+    "hard_exits_priority": "higher than FAILURE_WATCH logic",
+    "dca_enabled": false,
+    "future_data_allowed": false
+  }
+}
