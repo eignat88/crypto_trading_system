@@ -139,3 +139,48 @@ def test_raw_to_dds_valid_rejected_deferred_and_retry(isolated_database) -> None
         last_loaded_at, last_run_at = cursor.fetchone()
         assert last_loaded_at == base + timedelta(minutes=3)
         assert last_run_at == base + timedelta(hours=3)
+
+
+def test_replay_as_of_does_not_filter_raw_loaded_later(isolated_database) -> None:
+    """Event-time replay must accept RAW ingested after the replay timestamp."""
+    base = datetime(2026, 7, 2, tzinfo=UTC)
+    replay_as_of = base + timedelta(hours=2)
+    loaded_after_replay_cutoff = replay_as_of + timedelta(hours=1)
+
+    insert_raw_candle(
+        isolated_database,
+        open_time=base,
+        close_time=base + timedelta(hours=1),
+        loaded_at=loaded_after_replay_cutoff,
+    )
+
+    result = run_etl(isolated_database, replay_as_of)
+    assert result[4:] == (1, 1, 0, 0)
+
+    with isolated_database.cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT count(*)
+            FROM dds.candle c
+            JOIN dds.instrument i ON i.instrument_id = c.instrument_id
+            WHERE i.exchange_name = 'bybit'
+              AND i.symbol = 'BTCUSDT'
+              AND c.interval_code = '1h'
+              AND c.open_time = %s
+            """,
+            (base,),
+        )
+        assert cursor.fetchone()[0] == 1
+
+        cursor.execute(
+            """
+            SELECT last_loaded_at, last_run_at
+            FROM dds.etl_checkpoint
+            WHERE exchange_name = 'bybit'
+              AND symbol = 'BTCUSDT'
+              AND interval_code = '1h'
+            """
+        )
+        last_loaded_at, last_run_at = cursor.fetchone()
+        assert last_loaded_at == loaded_after_replay_cutoff
+        assert last_run_at == replay_as_of
