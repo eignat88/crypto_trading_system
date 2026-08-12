@@ -20,18 +20,14 @@ async def build_trend_down_diagnostics(
     run_id: UUID,
     session_factory: async_sessionmaker[AsyncSession] = async_session_factory,
 ):
-    """Build read-only TREND_DOWN diagnostics with explicit datetime query bounds.
-
-    The candle upper bound is calculated in Python instead of using
-    ``:period_end + interval`` in SQL. This avoids asyncpg/PostgreSQL bind-type
-    inference turning the comparison into ``timestamptz < interval``.
-    """
+    """Build read-only TREND_DOWN diagnostics against the run's derived-data versions."""
     async with session_factory() as session:
         run_result = await session.execute(
             text(
                 """
                 SELECT run_id, exchange_name, symbol, interval_code,
-                       period_start, period_end, backtest_config
+                       period_start, period_end, backtest_config,
+                       indicator_model_version, regime_model_version
                 FROM mart.backtest_run
                 WHERE run_id = :run_id
                 """
@@ -71,7 +67,10 @@ async def build_trend_down_diagnostics(
                        mr.regime
                 FROM dds.candle c
                 JOIN dds.instrument i ON i.instrument_id = c.instrument_id
-                LEFT JOIN dds.market_regime mr ON mr.candle_id = c.candle_id
+                LEFT JOIN dds.market_regime mr
+                  ON mr.candle_id = c.candle_id
+                 AND mr.indicator_model_version = :indicator_model_version
+                 AND mr.regime_model_version = :regime_model_version
                 WHERE i.exchange_name = :exchange_name
                   AND i.symbol = :symbol
                   AND c.interval_code = :interval_code
@@ -87,6 +86,8 @@ async def build_trend_down_diagnostics(
                 "interval_code": run["interval_code"],
                 "period_start": run["period_start"],
                 "candle_end": candle_end,
+                "indicator_model_version": run["indicator_model_version"],
+                "regime_model_version": run["regime_model_version"],
             },
         )
         candle_rows = [dict(row) for row in candle_result.mappings().all()]
