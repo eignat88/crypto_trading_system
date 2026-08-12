@@ -4,6 +4,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config.model_versions import INDICATOR_MODEL_VERSION, REGIME_MODEL_VERSION
 from app.database.connection import async_session_factory
 from app.indicators.atr import calculate_atr
 from app.indicators.ema import calculate_ema_series
@@ -15,9 +16,19 @@ logger = structlog.get_logger()
 
 
 class IndicatorCollector:
-    """Calculates and stores technical indicators."""
+    """Calculates and stores versioned technical indicators and market regimes."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        indicator_model_version: str = INDICATOR_MODEL_VERSION,
+        regime_model_version: str = REGIME_MODEL_VERSION,
+    ):
+        if not indicator_model_version:
+            raise ValueError("indicator_model_version must be non-empty")
+        if not regime_model_version:
+            raise ValueError("regime_model_version must be non-empty")
+        self.indicator_model_version = indicator_model_version
+        self.regime_model_version = regime_model_version
         self.regime_detector = MarketRegimeDetector()
 
     async def calculate_and_store_indicators(
@@ -44,6 +55,8 @@ class IndicatorCollector:
                 symbol=symbol,
                 interval=interval,
                 candles=len(candles),
+                indicator_model_version=self.indicator_model_version,
+                regime_model_version=self.regime_model_version,
             )
 
             closes = [Decimal(str(c["close_price"])) for c in candles]
@@ -63,33 +76,23 @@ class IndicatorCollector:
 
                 ema_20 = ema_20_series[i]
                 if ema_20 is not None:
-                    await self._store_indicator(
-                        session, candle_id, "EMA", ema_20, {"period": 20}
-                    )
+                    await self._store_indicator(session, candle_id, "EMA", ema_20, {"period": 20})
 
                 ema_50 = ema_50_series[i]
                 if ema_50 is not None:
-                    await self._store_indicator(
-                        session, candle_id, "EMA", ema_50, {"period": 50}
-                    )
+                    await self._store_indicator(session, candle_id, "EMA", ema_50, {"period": 50})
 
                 ema_200 = ema_200_series[i]
                 if ema_200 is not None:
-                    await self._store_indicator(
-                        session, candle_id, "EMA", ema_200, {"period": 200}
-                    )
+                    await self._store_indicator(session, candle_id, "EMA", ema_200, {"period": 200})
 
                 rsi = calculate_rsi(historical_closes, 14)
                 if rsi is not None:
-                    await self._store_indicator(
-                        session, candle_id, "RSI", rsi, {"period": 14}
-                    )
+                    await self._store_indicator(session, candle_id, "RSI", rsi, {"period": 14})
 
                 atr = calculate_atr(historical_highs, historical_lows, historical_closes, 14)
                 if atr is not None:
-                    await self._store_indicator(
-                        session, candle_id, "ATR", atr, {"period": 14}
-                    )
+                    await self._store_indicator(session, candle_id, "ATR", atr, {"period": 14})
 
                 volatility = calculate_historical_volatility(
                     historical_closes,
@@ -132,12 +135,12 @@ class IndicatorCollector:
                 symbol=symbol,
                 interval=interval,
                 processed=processed,
+                indicator_model_version=self.indicator_model_version,
+                regime_model_version=self.regime_model_version,
             )
             return processed
 
-    async def _get_instrument_id(
-        self, session: AsyncSession, symbol: str
-    ) -> int | None:
+    async def _get_instrument_id(self, session: AsyncSession, symbol: str) -> int | None:
         """Get instrument_id for a symbol."""
         result = await session.execute(
             text(
@@ -181,26 +184,30 @@ class IndicatorCollector:
         indicator_name: str,
         value: Decimal,
         params: dict,
-    ):
-        """Store a calculated indicator idempotently."""
+    ) -> None:
+        """Store a calculated indicator idempotently within its model version."""
         import json
 
         await session.execute(
             text(
                 """
                 INSERT INTO dds.indicator (
-                    candle_id, indicator_name, indicator_value, indicator_params
+                    candle_id, indicator_name, indicator_value, indicator_params, model_version
+                ) VALUES (
+                    :candle_id, :indicator_name, :value, CAST(:params AS jsonb), :model_version
                 )
-                VALUES (:candle_id, :indicator_name, :value, :params)
-                ON CONFLICT (candle_id, indicator_name, indicator_params)
-                DO UPDATE SET indicator_value = :value, calculated_at = now()
+                ON CONFLICT (candle_id, indicator_name, indicator_params, model_version)
+                DO UPDATE SET
+                    indicator_value = EXCLUDED.indicator_value,
+                    calculated_at = now()
                 """
             ),
             {
                 "candle_id": candle_id,
                 "indicator_name": indicator_name,
                 "value": value,
-                "params": json.dumps(params),
+                "params": json.dumps(params, sort_keys=True, separators=(",", ":")),
+                "model_version": self.indicator_model_version,
             },
         )
 
@@ -216,8 +223,8 @@ class IndicatorCollector:
         ema_200: Decimal | None,
         atr_percentage: Decimal | None,
         volatility: Decimal | None,
-    ):
-        """Store market regime idempotently."""
+    ) -> None:
+        """Store market regime idempotently within its regime model version."""
         import json
 
         await session.execute(
@@ -225,12 +232,14 @@ class IndicatorCollector:
                 """
                 INSERT INTO dds.market_regime (
                     candle_id, regime, confidence, reasons,
-                    ema_20, ema_50, ema_200, atr_percentage, volatility
+                    ema_20, ema_50, ema_200, atr_percentage, volatility,
+                    indicator_model_version, regime_model_version
                 ) VALUES (
-                    :candle_id, :regime, :confidence, :reasons,
-                    :ema_20, :ema_50, :ema_200, :atr_percentage, :volatility
+                    :candle_id, :regime, :confidence, CAST(:reasons AS jsonb),
+                    :ema_20, :ema_50, :ema_200, :atr_percentage, :volatility,
+                    :indicator_model_version, :regime_model_version
                 )
-                ON CONFLICT (candle_id)
+                ON CONFLICT (candle_id, regime_model_version)
                 DO UPDATE SET
                     regime = EXCLUDED.regime,
                     confidence = EXCLUDED.confidence,
@@ -240,6 +249,7 @@ class IndicatorCollector:
                     ema_200 = EXCLUDED.ema_200,
                     atr_percentage = EXCLUDED.atr_percentage,
                     volatility = EXCLUDED.volatility,
+                    indicator_model_version = EXCLUDED.indicator_model_version,
                     calculated_at = now()
                 """
             ),
@@ -247,11 +257,13 @@ class IndicatorCollector:
                 "candle_id": candle_id,
                 "regime": regime,
                 "confidence": confidence,
-                "reasons": json.dumps(reasons),
+                "reasons": json.dumps(reasons, ensure_ascii=False),
                 "ema_20": ema_20,
                 "ema_50": ema_50,
                 "ema_200": ema_200,
                 "atr_percentage": atr_percentage,
                 "volatility": volatility,
+                "indicator_model_version": self.indicator_model_version,
+                "regime_model_version": self.regime_model_version,
             },
         )
