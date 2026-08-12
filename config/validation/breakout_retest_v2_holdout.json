@@ -1,0 +1,33 @@
+{
+  "validation_id": "breakout_retest_v2_holdout_20260810_20270206",
+  "purpose": "independent prospective validation; data health only before unlock",
+  "strategy_name": "BreakoutRetest",
+  "parameters_version": "breakout_retest_v2",
+  "symbols": ["BTCUSDT", "ETHUSDT"],
+  "exchange": "bybit",
+  "interval": "1h",
+  "period_start": "2026-08-10T00:00:00+00:00",
+  "period_end": "2027-02-06T00:00:00+00:00",
+  "unlock_at": "2027-02-06T00:00:00+00:00",
+  "indicator_model_version": "indicators_v2_hourly_volatility",
+  "regime_model_version": "regime_v2_hourly_volatility",
+  "execution_model_version": "backtest_hardened_v1",
+  "pre_unlock_allowed": [
+    "candle_count",
+    "missing_intervals",
+    "duplicate_intervals",
+    "invalid_candles",
+    "derived_data_coverage"
+  ],
+  "pre_unlock_forbidden": [
+    "strategy_execution",
+    "trade_count",
+    "pnl",
+    "win_rate",
+    "profit_factor",
+    "drawdown",
+    "returns",
+    "performance_comparison"
+  ],
+  "strategy_implementation_required_for_open": true
+}
