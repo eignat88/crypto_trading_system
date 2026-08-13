@@ -69,11 +69,13 @@ class PaperExchange(BaseExchange):
             market_price,
         )
         record = {
+            "fill_id": str(uuid4()),
             "order_id": order_id,
             "symbol": execution.symbol,
             "side": execution.side.value,
             "quantity": execution.quantity,
             "price": execution.price,
+            "commission": Decimal("0"),
             "status": execution.status.value,
             "executed_at": datetime.now(timezone.utc),
         }
