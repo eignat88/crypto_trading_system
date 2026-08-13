@@ -6,7 +6,7 @@ orders. It converts a confirmed CTS state into the existing Signal domain model.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -41,7 +41,7 @@ class CTSBacktestAdapter:
             symbol=str(candle["symbol"]),
             price=Decimal(str(candle["close"])),
             quantity=Decimal("0"),
-            timestamp=candle.get("timestamp", datetime.utcnow()),
+            timestamp=candle.get("timestamp", datetime.now(UTC)),
             reason="CTS_TREND_DCA_CONFIRMATION",
             strategy=self.STRATEGY_VERSION,
             parameters_version=self.STRATEGY_VERSION,
