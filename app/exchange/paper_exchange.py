@@ -6,14 +6,16 @@ from uuid import uuid4
 from typing import Any
 
 from app.exchange.base_exchange import BaseExchange, Instrument, Candle
+from app.exchange.paper_execution_engine import ExecutionRequest, OrderSide, PaperExecutionEngine
 from app.exchange.paper_state import PaperState
 
 
 class PaperExchange(BaseExchange):
     """Simulation exchange. Never sends real orders."""
 
-    def __init__(self, state: PaperState | None = None) -> None:
+    def __init__(self, state: PaperState | None = None, execution_engine: PaperExecutionEngine | None = None) -> None:
         self.state = state or PaperState(balances={"USDT": Decimal("10000")})
+        self.execution_engine = execution_engine or PaperExecutionEngine()
 
     async def get_instruments(self) -> list[Instrument]:
         return [
@@ -47,6 +49,30 @@ class PaperExchange(BaseExchange):
         }
         self.state.orders[order_id] = order
         return order
+
+    async def execute_order(self, order_id: str, market_price: Decimal) -> dict[str, Any]:
+        order = self.state.orders[order_id]
+        execution = self.execution_engine.execute(
+            ExecutionRequest(
+                symbol=order["symbol"],
+                side=OrderSide(order["side"]),
+                quantity=order["quantity"],
+            ),
+            market_price,
+        )
+        record = {
+            "order_id": order_id,
+            "symbol": execution.symbol,
+            "side": execution.side.value,
+            "quantity": execution.quantity,
+            "price": execution.price,
+            "status": execution.status.value,
+            "executed_at": datetime.now(timezone.utc),
+        }
+        order["status"] = execution.status.value
+        order["price"] = execution.price
+        self.state.executions.append(record)
+        return record
 
     async def cancel_order(self, order_id: str) -> dict[str, Any]:
         order = self.state.orders[order_id]
