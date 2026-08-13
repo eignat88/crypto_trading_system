@@ -4,6 +4,7 @@ import json
 from dataclasses import asdict
 from datetime import datetime, timezone
 from uuid import uuid4
+from typing import Any
 
 from app.exchange.paper_state import PaperState
 
@@ -35,3 +36,21 @@ class PaperCheckpoint:
 
     def to_json(self) -> str:
         return PaperStateSerializer.dumps(self.state)
+
+
+class PaperRepository:
+    """Persistence boundary for paper trading runtime entities.
+
+    Initial implementation keeps the exchange decoupled from database details.
+    Database adapters can implement the same lifecycle methods later.
+    """
+
+    def __init__(self) -> None:
+        self.orders: list[dict[str, Any]] = []
+        self.fills: list[dict[str, Any]] = []
+
+    async def save_order(self, order: dict[str, Any]) -> None:
+        self.orders.append(order.copy())
+
+    async def save_fill(self, fill: dict[str, Any]) -> None:
+        self.fills.append(fill.copy())
