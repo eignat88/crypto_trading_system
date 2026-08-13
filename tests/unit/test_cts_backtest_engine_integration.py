@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.backtest.backtest_engine import BacktestConfig, BacktestEngine
@@ -8,7 +9,7 @@ def test_cts_strategy_runs_through_backtest_engine_without_lookahead() -> None:
     candles = [
         {
             "symbol": "BTCUSDT",
-            "open_time": "2026-01-01T00:00:00+00:00",
+            "open_time": datetime(2026, 1, 1, 0, 0, tzinfo=UTC),
             "open": "60000",
             "high": "60100",
             "low": "59900",
@@ -17,7 +18,7 @@ def test_cts_strategy_runs_through_backtest_engine_without_lookahead() -> None:
         },
         {
             "symbol": "BTCUSDT",
-            "open_time": "2026-01-01T01:00:00+00:00",
+            "open_time": datetime(2026, 1, 1, 1, 0, tzinfo=UTC),
             "open": "60050",
             "high": "60200",
             "low": "60000",
