@@ -43,4 +43,7 @@ def test_cts_order_fill_portfolio_lifecycle_without_same_bar_execution() -> None
     )
 
     assert result is not None
-    assert result.trades is not None
+    assert result.signals is not None
+    assert result.orders is not None
+    assert result.fills is not None
+    assert result.total_trades >= 0
