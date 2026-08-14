@@ -254,7 +254,6 @@ class PaperTradingRuntime:
         logger.info("PaperTradingRuntime starting...")
 
         # Emit runtime started metric
-        restored = False
         if self.metrics_collector is not None:
             self.metrics_collector.emit_runtime_started(restored_from_checkpoint=False)
 
@@ -263,7 +262,6 @@ class PaperTradingRuntime:
             restored_state = await self.restore_state()
 
             if restored_state is not None:
-                restored = True
                 logger.info(
                     "State restored: last_sequence=%d, last_timestamp=%s",
                     restored_state.last_market_sequence,

@@ -197,12 +197,20 @@ BEGIN
         v_total_rows := v_daily_rows + v_strategy_rows;
         v_status := 'success';
 
+        -- Update run log on success
+        IF p_log_run AND v_run_id IS NOT NULL THEN
+            UPDATE mart.etl_run
+            SET rows_processed = v_total_rows,
+                status = v_status,
+                completed_at = now()
+            WHERE run_id = v_run_id;
+        END IF;
+
     EXCEPTION WHEN OTHERS THEN
         v_status := 'failed';
         v_error_message := SQLERRM;
-        RAISE;
-    FINALLY
-        -- Update run log
+
+        -- Update run log on failure
         IF p_log_run AND v_run_id IS NOT NULL THEN
             UPDATE mart.etl_run
             SET rows_processed = v_total_rows,
@@ -211,6 +219,8 @@ BEGIN
                 completed_at = now()
             WHERE run_id = v_run_id;
         END IF;
+
+        RAISE;
     END;
 
     RETURN QUERY SELECT v_daily_rows, v_strategy_rows;

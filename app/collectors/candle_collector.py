@@ -38,7 +38,7 @@ class CandleCollector:
         calculate_indicators: bool = True,
     ) -> int:
         """Load historical candles with checkpoint support.
-        
+
         Args:
             symbol: Trading symbol (e.g., BTCUSDT)
             interval: Candle interval (e.g., 1h, 1d)
@@ -109,9 +109,11 @@ class CandleCollector:
                 if calculate_indicators and loaded_count > 0:
                     try:
                         await session.commit()
-                        indicators_calculated = await self.indicator_collector.calculate_and_store_indicators(
-                            symbol=symbol,
-                            interval=interval,
+                        indicators_calculated = (
+                            await self.indicator_collector.calculate_and_store_indicators(
+                                symbol=symbol,
+                                interval=interval,
+                            )
                         )
                         logger.info(
                             "indicators_calculated",

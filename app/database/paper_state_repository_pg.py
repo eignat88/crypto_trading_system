@@ -33,7 +33,11 @@ class PaperStateRepositoryPostgres:
 
     async def load_runtime_state(self) -> PaperRuntimeState | None:
         row = await self._connection.fetchrow(
-            "SELECT last_processed_timestamp, last_market_sequence, cash_balance FROM paper_runtime_state WHERE id=1"
+            """
+            SELECT last_processed_timestamp, last_market_sequence, cash_balance
+            FROM paper_runtime_state
+            WHERE id = 1
+            """
         )
         if row is None:
             return None
@@ -50,7 +54,12 @@ class PaperStateRepositoryPostgres:
             VALUES($1,$2,$3,$4,$5,$6)
             ON CONFLICT(order_id) DO UPDATE SET status=EXCLUDED.status
             """,
-            order.order_id, order.symbol, order.side, order.quantity, order.status, order.created_at,
+            order.order_id,
+            order.symbol,
+            order.side,
+            order.quantity,
+            order.status,
+            order.created_at,
         )
 
     async def load_orders(self) -> list[PaperOrderState]:

@@ -123,7 +123,6 @@ def run_etl(symbol: str = None, interval: str = None) -> dict:
             stats["source_count"] = len(raw_bars)
 
             for bar in raw_bars:
-                bar_id = bar[0]
                 instrument_id = bar[1]
                 bar_type = bar[2]
                 ts_event = bar[3]

@@ -30,9 +30,31 @@ class PostgresPaperRepository:
         query = text(
             """
             INSERT INTO dds.paper_orders
-            (order_id, client_order_id, symbol, side, order_type, quantity, price, status, created_at, updated_at)
+            (
+                order_id,
+                client_order_id,
+                symbol,
+                side,
+                order_type,
+                quantity,
+                price,
+                status,
+                created_at,
+                updated_at,
+            )
             VALUES
-            (:order_id, :client_order_id, :symbol, :side, :order_type, :quantity, :price, :status, :created_at, :updated_at)
+            (
+                :order_id,
+                :client_order_id,
+                :symbol,
+                :side,
+                :order_type,
+                :quantity,
+                :price,
+                :status,
+                :created_at,
+                :updated_at,
+            )
             ON CONFLICT (order_id)
             DO UPDATE SET
                 status = EXCLUDED.status,
