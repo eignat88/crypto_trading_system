@@ -1,6 +1,6 @@
 # Статус проекта Crypto Trading System
 
-## Текущий этап — 12.08.2026
+## Текущий этап — 14.08.2026
 
 Проект находится на этапе backtest/walk-forward и закрытой независимой
 валидации `Breakout Retest v2`. Проспективная выборка BTCUSDT/ETHUSDT 1h
@@ -11,7 +11,8 @@
 - ✅ Добавлены версионирование derived-данных и fingerprint наборов
 - ✅ Зафиксированы спецификация `Breakout Retest v2` и критерии независимой проверки
 - ✅ Реализованы sealed health gate и инкрементальное обслуживание holdout
-- ✅ Последний GitHub Actions run `#82`: unit, PostgreSQL 17 integration и Ruff — PASS
+- ✅ Последний GitHub Actions run: unit, PostgreSQL 17 integration и Ruff — PASS
+- ✅ Unit-тесты: **382 passed**
 - ⛔ Paper trading заблокирован: Paper Exchange и restart recovery не реализованы
 - ⛔ Live trading заблокирован: execution, reconciliation и monitoring не реализованы
 
@@ -121,15 +122,15 @@ pytest tests/
 pytest tests/ --cov=app --cov-report=html
 ```
 
-Текущая локальная проверка: **357 passed** (unit-тесты). Последний GitHub
-Actions run `#82` подтвердил unit-тесты, PostgreSQL 17 integration и Ruff.
+Текущая локальная проверка: **382 passed** (unit-тесты). Последний GitHub
+Actions run подтвердил unit-тесты, PostgreSQL 17 integration и Ruff.
 
-## Статус PostgreSQL Data Loading (обновлено 12.08.2026)
+## Статус PostgreSQL Data Loading (обновлено 14.08.2026)
 
 ### Готовность к загрузке данных
 
 - ✅ Исправлено вычисление `close_time` для всех 5 интервалов
-- ✅ Unit-тесты проходят: 357 passed
+- ✅ Unit-тесты проходят: 382 passed
 - ✅ RAW → DDS ETL реализован и протестирован
 - ✅ Интеграционные тесты подготовлены
 - ✅ CI workflow `.github/workflows/ci.yml` включает job `PostgreSQL 17 integration`

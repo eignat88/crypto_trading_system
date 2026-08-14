@@ -22,7 +22,7 @@ class PnLRecord:
     """Single PnL measurement at a point in time."""
 
     timestamp: datetime
-    equity: Decimal
+    equity: Decimal = Decimal("0")
     realized_pnl: Decimal = Decimal("0")
     unrealized_pnl: Decimal = Decimal("0")
     total_pnl: Decimal = Decimal("0")
@@ -321,7 +321,7 @@ class PaperPnLTracker:
         if engine is not None:
             # Use engine state for cash and position values
             price_provider = EnginePriceProvider(engine)
-            
+
             if unrealized_pnl is None:
                 unrealized_pnl_val = self.calculate_unrealized_pnl(
                     engine.positions,
