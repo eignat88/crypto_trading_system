@@ -6,6 +6,7 @@ from enum import Enum
 
 from app.exchange.fill_simulator import FillSimulator
 from app.models.candle import Candle
+from app.models.market_event import MarketEvent
 
 
 class OrderSide(str, Enum):
@@ -34,27 +35,36 @@ class ExecutionResult:
 
 
 class PaperExecutionEngine:
-    """Executes approved paper orders without real exchange calls.
-
-    Market data is consumed through Candle events from PaperMarketData.
-    """
+    """Executes approved paper orders without real exchange calls."""
 
     def __init__(self, fill_simulator: FillSimulator | None = None) -> None:
         self.fill_simulator = fill_simulator or FillSimulator()
         self._last_candle: Candle | None = None
+        self._last_sequence: int = 0
 
     @property
     def last_candle(self) -> Candle | None:
         return self._last_candle
 
-    def on_candle(self, candle: Candle) -> None:
-        candle.validate()
+    @property
+    def last_sequence(self) -> int:
+        return self._last_sequence
+
+    def on_market_event(self, event: MarketEvent) -> None:
+        event.candle.validate()
+
+        if event.sequence <= self._last_sequence:
+            return
 
         if self._last_candle is not None:
-            if candle.open_time <= self._last_candle.open_time:
+            if event.candle.open_time <= self._last_candle.open_time:
                 return
 
-        self._last_candle = candle
+        self._last_sequence = event.sequence
+        self._last_candle = event.candle
+
+    def on_candle(self, candle: Candle) -> None:
+        self.on_market_event(MarketEvent(candle=candle, sequence=self._last_sequence + 1))
 
     def execute(
         self,
