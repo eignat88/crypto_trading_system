@@ -39,17 +39,21 @@ class PaperCheckpoint:
 
 
 class PaperRepository:
-    """Persistence boundary for paper trading runtime entities.
-
-    Initial implementation keeps the exchange decoupled from database details.
-    Database adapters can implement the same lifecycle methods later.
-    """
+    """Persistence boundary for paper trading runtime entities."""
 
     def __init__(self) -> None:
         self.orders: list[dict[str, Any]] = []
         self.fills: list[dict[str, Any]] = []
 
     async def save_order(self, order: dict[str, Any]) -> None:
+        self.orders.append(order.copy())
+
+    async def update_order(self, order: dict[str, Any]) -> None:
+        for index, existing in enumerate(self.orders):
+            if existing.get("order_id") == order.get("order_id"):
+                self.orders[index] = order.copy()
+                return
+
         self.orders.append(order.copy())
 
     async def save_fill(self, fill: dict[str, Any]) -> None:

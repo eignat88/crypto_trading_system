@@ -54,8 +54,8 @@ class PaperExchange(BaseExchange):
             "status": "NEW",
             "created_at": datetime.now(timezone.utc),
         }
-        self.state.orders[order_id] = order
         await self.repository.save_order(order)
+        self.state.orders[order_id] = order
         return order
 
     async def execute_order(self, order_id: str, market_price: Decimal) -> dict[str, Any]:
@@ -79,15 +79,24 @@ class PaperExchange(BaseExchange):
             "status": execution.status.value,
             "executed_at": datetime.now(timezone.utc),
         }
-        order["status"] = execution.status.value
-        order["price"] = execution.price
-        self.state.executions.append(record)
+
+        updated_order = order.copy()
+        updated_order["status"] = execution.status.value
+        updated_order["price"] = execution.price
+
         await self.repository.save_fill(record)
+        await self.repository.update_order(updated_order)
+
+        self.state.orders[order_id] = updated_order
+        self.state.executions.append(record)
         return record
 
     async def cancel_order(self, order_id: str) -> dict[str, Any]:
-        order = self.state.orders[order_id]
+        order = self.state.orders[order_id].copy()
         order["status"] = "CANCELED"
+
+        await self.repository.update_order(order)
+        self.state.orders[order_id] = order
         return order
 
     async def get_executions(self, symbol: str | None = None, start_time: datetime | None = None) -> list[dict[str, Any]]:
