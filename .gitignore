@@ -38,4 +38,5 @@ MANIFEST
 .coverage
 coverage/
 htmlcov/
-```
+```artifacts/
+logs/
