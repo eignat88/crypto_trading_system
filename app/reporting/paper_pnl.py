@@ -125,7 +125,9 @@ class PaperPnLTracker:
         """Calculate current equity."""
         if not self._pnl_records:
             return self.initial_capital
-        return self._pnl_records[-1].equity
+        equity = self._pnl_records[-1].equity
+        logger.debug(f"current_equity: {equity}, pnl_records count: {len(self._pnl_records)}")
+        return equity
 
     @property
     def current_drawdown(self) -> Decimal:
@@ -314,19 +316,20 @@ class PaperPnLTracker:
             timestamp = datetime.now(timezone.utc)
 
         # Normalize PnL values
-        realized_pnl = realized_pnl or Decimal("0")
-        unrealized_pnl = unrealized_pnl or Decimal("0")
-        total_pnl = realized_pnl + unrealized_pnl
+        realized_pnl_val = realized_pnl if realized_pnl is not None else Decimal("0")
+        unrealized_pnl_val = unrealized_pnl if unrealized_pnl is not None else Decimal("0")
+        total_pnl = realized_pnl_val + unrealized_pnl_val
 
         if engine is not None:
             # Use engine state for cash and position values
             price_provider = EnginePriceProvider(engine)
             
-            if unrealized_pnl == Decimal("0"):
-                unrealized_pnl = self.calculate_unrealized_pnl(
+            if unrealized_pnl is None:
+                unrealized_pnl_val = self.calculate_unrealized_pnl(
                     engine.positions,
                     price_provider,
                 )
+                total_pnl = realized_pnl_val + unrealized_pnl_val
 
             cash_balance = engine.cash_balance
             position_values = []
@@ -345,6 +348,8 @@ class PaperPnLTracker:
             position_value = Decimal("0")
             equity = self.initial_capital + total_pnl
 
+        logger.debug(f"record_snapshot: realized_pnl={realized_pnl_val}, unrealized_pnl={unrealized_pnl_val}, equity={equity}")
+
         # Update peak equity for drawdown calculation
         if equity > self._peak_equity:
             self._peak_equity = equity
@@ -354,8 +359,8 @@ class PaperPnLTracker:
 
         record = PnLRecord(
             timestamp=timestamp,
-            realized_pnl=realized_pnl,
-            unrealized_pnl=unrealized_pnl,
+            realized_pnl=realized_pnl_val,
+            unrealized_pnl=unrealized_pnl_val,
             total_pnl=total_pnl,
             fees_paid=self._fees_paid,
             slippage=self._slippage_total,
