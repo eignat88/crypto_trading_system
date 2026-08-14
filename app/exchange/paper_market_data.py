@@ -4,6 +4,7 @@ from collections.abc import Iterable, Iterator
 from datetime import datetime
 
 from app.models.candle import Candle
+from app.models.market_event import MarketEvent
 
 
 class PaperMarketData:
@@ -31,3 +32,10 @@ class PaperMarketData:
 
             self._last_processed_time = candle.open_time
             yield candle
+
+    def stream(self) -> Iterator[MarketEvent]:
+        for sequence, candle in enumerate(self.replay(), start=1):
+            yield MarketEvent(
+                candle=candle,
+                sequence=sequence,
+            )
