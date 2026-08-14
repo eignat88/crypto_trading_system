@@ -12,13 +12,13 @@ from app.models.market_event import MarketEvent
 class PaperRuntimeStatus:
     processed_events: int
     running: bool
+    restored: bool
 
 
 class PaperTradingRuntime:
     """Coordinates paper market data and execution flow.
 
-    This layer orchestrates runtime only. It does not contain strategy logic
-    or risk rules.
+    Runtime orchestration only. Strategy and risk rules stay outside this layer.
     """
 
     def __init__(
@@ -30,19 +30,28 @@ class PaperTradingRuntime:
         self.execution_engine = execution_engine
         self._processed_events = 0
         self._running = False
+        self._restored = False
 
     @property
     def status(self) -> PaperRuntimeStatus:
         return PaperRuntimeStatus(
             processed_events=self._processed_events,
             running=self._running,
+            restored=self._restored,
         )
 
-    def run_once(self) -> bool:
-        """Process the next available market event.
+    async def restore_state(self) -> None:
+        """Restore execution state before processing new market events."""
+        await self.execution_engine.restore_state()
+        self._restored = True
 
-        Returns False when there is no new market data.
-        """
+    async def start(self) -> Iterator[MarketEvent]:
+        """Restore state and start runtime processing."""
+        await self.restore_state()
+        return self.run()
+
+    def run_once(self) -> bool:
+        """Process the next available market event."""
         event: MarketEvent | None = next(
             self.market_data.stream(),
             None,
