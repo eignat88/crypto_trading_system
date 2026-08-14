@@ -313,13 +313,16 @@ class PaperPnLTracker:
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
 
-        if engine is not None:
-            if realized_pnl is None:
-                # Would need fills history - simplified here
-                realized_pnl = Decimal("0")
+        # Normalize PnL values
+        realized_pnl = realized_pnl or Decimal("0")
+        unrealized_pnl = unrealized_pnl or Decimal("0")
+        total_pnl = realized_pnl + unrealized_pnl
 
-            if unrealized_pnl is None:
-                price_provider = EnginePriceProvider(engine)
+        if engine is not None:
+            # Use engine state for cash and position values
+            price_provider = EnginePriceProvider(engine)
+            
+            if unrealized_pnl == Decimal("0"):
                 unrealized_pnl = self.calculate_unrealized_pnl(
                     engine.positions,
                     price_provider,
@@ -335,17 +338,12 @@ class PaperPnLTracker:
                         position_values.append(position.quantity * price)
 
             position_value = sum(position_values, Decimal("0"))
-            # When using engine, equity = cash + position value (which already reflects PnL)
             equity = cash_balance + position_value
         else:
-            cash_balance = Decimal("0")
+            # No engine: calculate equity from initial capital + PnL
+            cash_balance = self.initial_capital
             position_value = Decimal("0")
-            realized_pnl = realized_pnl or Decimal("0")
-            unrealized_pnl = unrealized_pnl or Decimal("0")
-            # When no engine, equity = initial capital + PnL
-            equity = self.initial_capital + realized_pnl + unrealized_pnl
-
-        total_pnl = realized_pnl + unrealized_pnl
+            equity = self.initial_capital + total_pnl
 
         # Update peak equity for drawdown calculation
         if equity > self._peak_equity:
