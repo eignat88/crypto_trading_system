@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -19,7 +19,7 @@ from app.reporting.breakout_retest_v2_validation_preflight import (
     validate_symbol_records,
 )
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _records(symbol: str, start: datetime, hours: int) -> list[StructuralCandleRecord]:

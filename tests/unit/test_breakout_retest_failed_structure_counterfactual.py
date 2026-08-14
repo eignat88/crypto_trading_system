@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -12,7 +12,7 @@ from app.reporting.breakout_retest_failed_structure_counterfactual import (
     evaluate_failed_structure_trade,
 )
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _trade(**changes) -> BreakoutRetestTrade:

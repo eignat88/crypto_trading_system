@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from statistics import median
 from typing import Any
@@ -95,8 +95,8 @@ def _utc(value: datetime | str) -> datetime:
     if isinstance(value, str):
         value = datetime.fromisoformat(value[:-1] + "+00:00" if value.endswith("Z") else value)
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc)
+        value = value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _json(value: Any) -> dict[str, Any]:

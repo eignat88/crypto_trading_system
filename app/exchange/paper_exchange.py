@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
-from uuid import uuid4
 from typing import Any
+from uuid import uuid4
 
-from app.exchange.base_exchange import BaseExchange, Instrument, Candle
+from app.exchange.base_exchange import BaseExchange, Candle, Instrument
 from app.exchange.paper_execution_engine import ExecutionRequest, OrderSide, PaperExecutionEngine
 from app.exchange.paper_repository import PaperRepository
 from app.exchange.paper_state import PaperState
@@ -52,7 +52,7 @@ class PaperExchange(BaseExchange):
             "quantity": quantity,
             "price": price,
             "status": "NEW",
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
         }
         await self.repository.save_order(order)
         self.state.orders[order_id] = order
@@ -77,7 +77,7 @@ class PaperExchange(BaseExchange):
             "price": execution.price,
             "commission": Decimal("0"),
             "status": execution.status.value,
-            "executed_at": datetime.now(timezone.utc),
+            "executed_at": datetime.now(UTC),
         }
 
         updated_order = order.copy()

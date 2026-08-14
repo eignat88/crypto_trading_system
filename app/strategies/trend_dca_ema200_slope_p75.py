@@ -7,7 +7,6 @@ from typing import Any
 from app.models import Signal
 from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
-
 EXPERIMENT_PARAMETERS_VERSION = "trend_dca_v1_ema200_slope_train_p75"
 
 

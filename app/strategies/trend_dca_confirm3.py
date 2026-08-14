@@ -8,7 +8,6 @@ from app.indicators.market_regime import MarketRegime
 from app.models import Signal
 from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
-
 EXPERIMENT_PARAMETERS_VERSION = "trend_dca_v1_trend_down_confirm3"
 TREND_DOWN_CONFIRMATION_BARS = 3
 

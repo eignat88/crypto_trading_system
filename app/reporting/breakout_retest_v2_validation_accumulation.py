@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 import hashlib
-from typing import Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 
 from app.reporting.breakout_retest_v2_validation_preflight import (
     REQUIRED_INTERVAL,
@@ -13,7 +13,7 @@ from app.reporting.breakout_retest_v2_validation_preflight import (
 )
 
 VALIDATION_START = RESEARCH_EXHAUSTED_END
-VALIDATION_END = datetime(2027, 2, 6, 0, 0, tzinfo=timezone.utc)
+VALIDATION_END = datetime(2027, 2, 6, 0, 0, tzinfo=UTC)
 TARGET_HOURS = int((VALIDATION_END - VALIDATION_START).total_seconds() // 3600)
 TARGET_DAYS = int((VALIDATION_END - VALIDATION_START).total_seconds() // 86400)
 
@@ -68,7 +68,7 @@ class ValidationAccumulationStatus:
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         raise ValueError("as_of must be timezone-aware")
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 def effective_cutoff(as_of: datetime) -> datetime:

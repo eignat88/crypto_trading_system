@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import datetime, timezone
+from collections.abc import Iterable
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Iterable
+from typing import Any
 
 
 def _canonical_scalar(value: Any) -> Any:
@@ -13,7 +14,7 @@ def _canonical_scalar(value: Any) -> Any:
     if isinstance(value, datetime):
         if value.tzinfo is None:
             raise ValueError("dataset timestamps must be timezone-aware")
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     return value
 
 

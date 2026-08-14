@@ -4,15 +4,21 @@ import argparse
 import asyncio
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from app.backtest.backtest_engine import BacktestConfig, BacktestEngine
-from app.backtest.walk_forward import WalkForwardConfig, generate_walk_forward_windows, run_fixed_parameter_walk_forward
+from app.backtest.walk_forward import (
+    WalkForwardConfig,
+    generate_walk_forward_windows,
+    run_fixed_parameter_walk_forward,
+)
 from app.reporting.breakout_retest_attribution import reconstruct_breakout_retest_trades
-from app.reporting.breakout_retest_failed_structure_counterfactual import build_failed_structure_counterfactual
+from app.reporting.breakout_retest_failed_structure_counterfactual import (
+    build_failed_structure_counterfactual,
+)
 from app.strategies.breakout_retest import BreakoutRetestStrategy
 from scripts.run_backtest import load_candles, parse_datetime
 
@@ -27,7 +33,7 @@ def _jd(value: Any) -> str:
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     return str(value)
 
 
@@ -154,7 +160,7 @@ async def main() -> None:
 
     out = Path("artifacts/diagnostics")
     out.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    ts = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     path = out / f"breakout_retest_failed_structure_counterfactual_v1_{ts}.json"
     path.write_text(
         json.dumps(

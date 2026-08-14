@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -13,7 +13,7 @@ from app.strategies.breakout_retest_v2 import (
     BreakoutRetestV2Strategy,
 )
 
-T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
 SYMBOL = "BTCUSDT"
 
 

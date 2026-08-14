@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.database.connection import async_session_factory
 
-
 QUANTITY_RECONCILIATION_TOLERANCE = Decimal("1E-17")
 
 

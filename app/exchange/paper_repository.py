@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
-from uuid import uuid4
+from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 from app.exchange.paper_state import PaperState
 
@@ -32,7 +32,7 @@ class PaperCheckpoint:
     def __init__(self, state: PaperState) -> None:
         self.id = str(uuid4())
         self.state = state
-        self.created_at = datetime.now(timezone.utc)
+        self.created_at = datetime.now(UTC)
 
     def to_json(self) -> str:
         return PaperStateSerializer.dumps(self.state)

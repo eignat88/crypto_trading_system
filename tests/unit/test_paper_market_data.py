@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.exchange.paper_market_data import PaperMarketData
@@ -6,7 +6,7 @@ from app.models.candle import Candle
 
 
 def make_candle(hour: int) -> Candle:
-    start = datetime(2026, 8, 14, hour, tzinfo=timezone.utc)
+    start = datetime(2026, 8, 14, hour, tzinfo=UTC)
     return Candle(
         symbol="BTCUSDT",
         open_time=start,

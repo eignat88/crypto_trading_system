@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.backtest.ema200_slope_p75_walk_forward import (
@@ -13,7 +13,7 @@ from app.strategies.trend_dca_ema200_slope_p75 import (
     TrendDCAEMA200SlopeP75Strategy,
 )
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _candle(hour: int, ema200: str, *, rsi: str = "40", regime=MarketRegime.TREND_UP):

@@ -4,20 +4,21 @@ import argparse
 import asyncio
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from app.backtest.walk_forward import WalkForwardConfig, run_fixed_parameter_walk_forward
 from run_backtest import load_candles, parse_datetime
+
+from app.backtest.walk_forward import WalkForwardConfig, run_fixed_parameter_walk_forward
 
 
 def json_default(value: Any) -> str:
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     return str(value)
 
 
@@ -66,7 +67,7 @@ async def main() -> None:
 
     payload = {
         "metadata": {
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
             "exchange": args.exchange,
             "symbol": args.symbol,
             "interval": args.interval,
@@ -108,7 +109,7 @@ async def main() -> None:
 
     output_dir = Path("artifacts/walk_forward")
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output_file = output_dir / f"trend_dca_{args.symbol}_{args.interval}_{timestamp}.json"
     output_file.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, default=json_default),

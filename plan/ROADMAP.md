@@ -12,10 +12,10 @@
 | Конфигурация | ✅ Готово | `app/config/settings.py` |
 | PostgreSQL RAW слой | ✅ Готово | `sql/001_create_raw.sql` |
 | PostgreSQL DDS слой и RAW → DDS ETL | ✅ Готово | `sql/002_create_dds.sql`, `sql/005_raw_to_dds_etl.sql`, `scripts/load_dds.py` |
-| PostgreSQL MART схема | 🚧 Частично | `sql/003_create_mart.sql` |
+| PostgreSQL MART слой и DDS → MART ETL | ✅ Готово | `sql/003_create_mart.sql`, `sql/006_dds_to_mart_etl.sql`, `scripts/load_mart.py` |
 | Bybit клиент | ✅ Готово | `app/exchange/bybit_client.py` |
 | Сборщик свечей | ✅ Готово | `app/collectors/candle_collector.py` |
-| Сборщик индикаторов | 🚧 Частично | `app/collectors/indicator_collector.py` |
+| Сборщик индикаторов | ✅ Готово | `app/collectors/indicator_collector.py` |
 | Sealed holdout pipeline | ✅ Готово | `scripts/update_holdout_data.py`, `scripts/holdout_validation.py` |
 | Индикаторы (EMA, RSI, ATR) | ✅ Готово | `app/indicators/` |
 | Режим рынка | ✅ Готово | `app/indicators/market_regime.py` |
@@ -33,10 +33,10 @@
 
 ### T7: Интеграция индикаторов с коллектором
 - [x] Создать `app/collectors/indicator_collector.py`
-- [ ] Интегрировать расчёт EMA, RSI, ATR при загрузке свечей
+- [x] Интегрировать расчёт EMA, RSI, ATR при загрузке свечей
 - [x] Сохранение индикаторов в DDS слой
 - [x] Инкрементальный расчёт недостающих versioned-строк для sealed holdout
-- [ ] Подключить общий инкрементальный пересчёт к основному pipeline
+- [x] Подключить общий инкрементальный пересчёт к основному pipeline
 
 **Результат**: При загрузке свечей автоматически рассчитываются индикаторы
 
@@ -61,8 +61,8 @@
 ### T10: Создание MART слоя
 - [x] Создать `sql/003_create_mart.sql`
 - [x] Таблицы: `mart.daily_performance`, `mart.strategy_performance`
-- [ ] Агрегация данных для отчётности
-- [ ] ETL процесс из DDS в MART
+- [x] Агрегация данных для отчётности
+- [x] ETL процесс из DDS в MART
 
 **Результат**: Аналитические показатели для отчётов
 

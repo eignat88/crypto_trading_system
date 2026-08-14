@@ -14,7 +14,7 @@ import asyncio
 import json
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,7 +58,7 @@ def parse_args() -> argparse.Namespace:
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         raise ValueError("update timestamp must be timezone-aware")
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 def _load_definition(path: Path) -> HoldoutDefinition:
@@ -211,7 +211,7 @@ async def main() -> None:
     args = parse_args()
     definition = _load_definition(args.definition)
     as_of = (
-        datetime.now(timezone.utc)
+        datetime.now(UTC)
         if args.as_of is None
         else _utc(datetime.fromisoformat(args.as_of))
     )

@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
 from typing import Any
 
 from app.models import Fill, Signal
 from app.strategies.breakout_retest import (
-    BreakoutRetestConfig,
-    BreakoutRetestStrategy,
     RESISTANCE_LOOKBACK_BARS,
     RETEST_TIMEOUT_BARS,
+    BreakoutRetestConfig,
+    BreakoutRetestStrategy,
 )
 
 PARAMETERS_VERSION_V2 = "breakout_retest_v2"

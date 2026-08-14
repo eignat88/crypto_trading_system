@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -28,12 +28,12 @@ def parse_datetime(value: str) -> datetime:
     result = datetime.fromisoformat(normalized)
     if result.tzinfo is None:
         raise ValueError("validation timestamps must include timezone")
-    return result.astimezone(timezone.utc)
+    return result.astimezone(UTC)
 
 
 def json_default(value: Any) -> str:
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     return str(value)
 
 
@@ -189,13 +189,13 @@ async def main() -> None:
 
     output_dir = Path("artifacts/engineering")
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     artifact = output_dir / f"breakout_retest_v2_validation_preflight_{timestamp}.json"
     artifact.write_text(
         json.dumps(
             {
                 "metadata": {
-                    "created_at": datetime.now(timezone.utc),
+                    "created_at": datetime.now(UTC),
                     "purpose": "independent validation preflight only",
                     "strategy_executed": False,
                     "performance_calculated": False,

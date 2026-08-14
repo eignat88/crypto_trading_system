@@ -10,7 +10,6 @@ from app.backtest.backtest_engine import BacktestConfig, BacktestEngine, Backtes
 from app.strategies.base_strategy import BaseStrategy
 from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
-
 _INTERVAL_SECONDS = {
     "5m": 5 * 60,
     "15m": 15 * 60,

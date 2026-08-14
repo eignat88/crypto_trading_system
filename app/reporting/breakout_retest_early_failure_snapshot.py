@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any
 
 from app.reporting.breakout_retest_attribution import BreakoutRetestTrade
-
 
 SNAPSHOT_HOURS = 24
 

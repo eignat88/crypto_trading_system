@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -18,7 +18,7 @@ def _row(*, side: str, quantity: str, price: str, commission: str, hour: int, re
         "quantity": Decimal(quantity),
         "price": Decimal(price),
         "commission": Decimal(commission),
-        "fill_time": datetime(2026, 1, 1, hour, tzinfo=timezone.utc),
+        "fill_time": datetime(2026, 1, 1, hour, tzinfo=UTC),
         "signal": signal,
     }
 

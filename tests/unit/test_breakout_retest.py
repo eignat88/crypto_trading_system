@@ -1,22 +1,18 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-
-import pytest
 
 from app.backtest.backtest_engine import BacktestConfig, BacktestEngine
 from app.indicators.market_regime import MarketRegime
-from app.models import Fill
 from app.strategies.breakout_retest import (
     PARAMETERS_VERSION,
     RESISTANCE_LOOKBACK_BARS,
     RETEST_TIMEOUT_BARS,
-    BreakoutRetestConfig,
     BreakoutRetestStrategy,
 )
 
-UTC = timezone.utc
+UTC = UTC
 START = datetime(2026, 1, 1, tzinfo=UTC)
 BTC = "BTCUSDT"
 ETH = "ETHUSDT"

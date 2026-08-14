@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -11,7 +11,7 @@ from app.reporting.breakout_retest_failed_structure_false_positive_attribution i
     categorical_counts,
 )
 
-T0 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+T0 = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 def _trade(*, pnl: Decimal = Decimal("-2"), exit_reason: str = "Regime changed to TREND_DOWN") -> BreakoutRetestTrade:

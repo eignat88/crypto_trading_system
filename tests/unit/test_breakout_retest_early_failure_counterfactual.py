@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -9,7 +9,7 @@ from app.reporting.breakout_retest_early_failure_counterfactual import (
     evaluate_early_failure_trade,
 )
 
-T0=datetime(2026,1,1,tzinfo=timezone.utc)
+T0=datetime(2026,1,1,tzinfo=UTC)
 
 def trade(*,pnl=Decimal("-1"),exit_hours=60,exit_reason="Regime changed to TREND_DOWN"):
     return BreakoutRetestTrade(symbol="BTCUSDT",window_index=1,breakout_time=T0-timedelta(hours=2),breakout_level=Decimal("99"),breakout_close=Decimal("101"),breakout_strength_pct=Decimal("0.02"),retest_time=T0-timedelta(hours=1),bars_to_retest=1,retest_low=Decimal("99"),retest_close=Decimal("100"),retest_depth_pct=Decimal("0"),retest_close_offset_pct=Decimal("0.01"),entry_fill_time=T0,entry_price=Decimal("100"),quantity=Decimal("1"),entry_regime="TREND_UP",entry_ema50=Decimal("101"),entry_ema200=Decimal("99"),entry_volatility=Decimal("0.1"),exit_time=T0+timedelta(hours=exit_hours),exit_price=Decimal("99"),exit_reason=exit_reason,entry_commission=Decimal("0.1"),exit_commission=Decimal("0.1"),realized_pnl=pnl,holding_bars=exit_hours)

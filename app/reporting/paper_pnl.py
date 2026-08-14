@@ -3,16 +3,14 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
 
 from app.exchange.paper_execution_engine import PaperExecutionEngine
-from app.models.candle import Candle
 from app.models.paper_fill_state import PaperFillState
 from app.models.paper_position_state import PaperPositionState
-
 
 logger = logging.getLogger(__name__)
 
@@ -311,7 +309,7 @@ class PaperPnLTracker:
             PnLRecord with current metrics
         """
         if timestamp is None:
-            timestamp = datetime.now(timezone.utc)
+            timestamp = datetime.now(UTC)
 
         # Normalize PnL values
         realized_pnl_val = realized_pnl if realized_pnl is not None else Decimal("0")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 
@@ -29,5 +29,5 @@ class FillSimulator:
         return FillResult(
             quantity=quantity,
             price=market_price,
-            executed_at=datetime.now(timezone.utc),
+            executed_at=datetime.now(UTC),
         )

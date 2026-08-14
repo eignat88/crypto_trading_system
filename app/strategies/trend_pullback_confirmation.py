@@ -9,7 +9,6 @@ from app.indicators.market_regime import MarketRegime
 from app.models import Signal
 from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
-
 PARAMETERS_VERSION = "trend_pullback_confirmation_v1"
 SETUP_TIMEOUT_BARS = 12
 

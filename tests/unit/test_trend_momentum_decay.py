@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -6,7 +6,7 @@ import pytest
 
 from app.reporting.trend_momentum_decay import HORIZONS, build_trend_momentum_decay
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _candles(count: int = 80) -> list[dict]:

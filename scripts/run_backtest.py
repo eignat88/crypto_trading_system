@@ -5,7 +5,7 @@ import asyncio
 import json
 import subprocess
 from dataclasses import asdict, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -30,8 +30,8 @@ def parse_datetime(value: str) -> datetime:
         normalized = normalized[:-1] + "+00:00"
     result = datetime.fromisoformat(normalized)
     if result.tzinfo is None:
-        result = result.replace(tzinfo=timezone.utc)
-    return result.astimezone(timezone.utc)
+        result = result.replace(tzinfo=UTC)
+    return result.astimezone(UTC)
 
 
 def json_default(value: Any) -> str:
@@ -225,7 +225,7 @@ def build_output(
     )
     return {
         "metadata": {
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "git_commit": git_commit(),
             "exchange": args.exchange,
             "symbol": args.symbol,
@@ -318,7 +318,7 @@ async def main() -> None:
 
     output_dir = Path("artifacts/backtests")
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output_file = output_dir / f"trend_dca_{args.symbol}_{args.interval}_{timestamp}.json"
     output_file.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, default=json_default),

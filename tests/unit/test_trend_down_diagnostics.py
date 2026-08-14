@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -10,7 +10,7 @@ from app.reporting.trend_down_diagnostics import (
     summarize_trend_down_diagnostics,
 )
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _fill(*, side: str, qty: str, price: str, fee: str, hour: int, reason: str = "", signal_price: str | None = None):

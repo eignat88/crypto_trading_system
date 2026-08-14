@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from app.backtest.backtest_engine import BacktestConfig, BacktestEngine
@@ -11,7 +11,7 @@ from app.reporting.v2_entry_funnel import (
 )
 from app.strategies.trend_pullback_confirmation import TrendPullbackConfirmationStrategy
 
-UTC = timezone.utc
+UTC = UTC
 SYMBOL = "BTCUSDT"
 START = datetime(2026, 1, 1, tzinfo=UTC)
 

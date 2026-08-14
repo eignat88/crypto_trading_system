@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from unittest.mock import AsyncMock
 
@@ -23,7 +23,7 @@ async def test_save_order_executes_insert_query() -> None:
         "quantity": "0.01",
         "price": "60000",
         "status": "FILLED",
-        "created_at": datetime.now(timezone.utc),
+        "created_at": datetime.now(UTC),
     }
 
     await repository.save_order(order)
@@ -50,7 +50,7 @@ async def test_save_fill_executes_insert_query() -> None:
         "quantity": "0.01",
         "price": "60000",
         "commission": "0.1",
-        "executed_at": datetime.now(timezone.utc),
+        "executed_at": datetime.now(UTC),
     }
 
     await repository.save_fill(fill)

@@ -3,19 +3,23 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from app.backtest.walk_forward import WalkForwardConfig, WalkForwardResult, run_fixed_parameter_walk_forward
+from run_backtest import load_candles, parse_datetime
+
+from app.backtest.walk_forward import (
+    WalkForwardConfig,
+    WalkForwardResult,
+    run_fixed_parameter_walk_forward,
+)
 from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 from app.strategies.trend_dca_confirm3 import (
     EXPERIMENT_PARAMETERS_VERSION,
     TrendDCAConfirm3Strategy,
 )
-from run_backtest import load_candles, parse_datetime
-
 
 BASELINE_VERSION = "trend_dca_v1"
 
@@ -24,7 +28,7 @@ def _json_default(value: Any) -> str:
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     return str(value)
 
 
@@ -230,7 +234,7 @@ async def main() -> None:
 
     payload = {
         "metadata": {
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
             "exchange": args.exchange,
             "symbols": args.symbols,
             "interval": args.interval,
@@ -272,7 +276,7 @@ async def main() -> None:
 
     output_dir = Path("artifacts/walk_forward/experiments")
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output_file = output_dir / f"trend_down_confirm3_ab_{args.interval}_{timestamp}.json"
     output_file.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, default=_json_default),

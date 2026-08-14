@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import importlib.util
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -24,7 +24,7 @@ DEFAULT_DEFINITION = Path("config/validation/breakout_retest_v2_holdout.json")
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _load_definition(path: Path) -> HoldoutDefinition:
@@ -179,7 +179,7 @@ async def _data_health(definition: HoldoutDefinition, as_of: datetime) -> int:
     print("===============================")
     print(f"validation_id        : {definition.validation_id}")
     print(f"period               : {definition.period_start.isoformat()} -> {definition.period_end.isoformat()}")
-    print(f"as_of                : {as_of.astimezone(timezone.utc).isoformat()}")
+    print(f"as_of                : {as_of.astimezone(UTC).isoformat()}")
     print(f"completed_through    : {completed_interval_end(definition, now=as_of).isoformat()}")
     print("performance_access   : SEALED")
     print("performance_metrics  : NOT_COMPUTED")

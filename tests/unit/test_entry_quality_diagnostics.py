@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -6,7 +6,7 @@ import pytest
 
 from app.reporting.entry_quality_diagnostics import reconstruct_entry_quality, summarize_group
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _signal(ts: datetime, *, price: str, reason: str = "", regime: str = "TREND_UP") -> dict:

@@ -70,7 +70,7 @@ def _trade_seed(base_seed: int, trade: BreakoutRetestTrade) -> int:
     material = (
         f"failed-structure-v1|{base_seed}|{trade.symbol}|{trade.window_index}|"
         f"{trade.entry_fill_time.isoformat()}"
-    ).encode("utf-8")
+    ).encode()
     return int.from_bytes(sha256(material).digest()[:8], "big")
 
 

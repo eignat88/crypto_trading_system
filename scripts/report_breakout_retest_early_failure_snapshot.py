@@ -5,7 +5,7 @@ import asyncio
 import csv
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -23,9 +23,8 @@ from app.reporting.breakout_retest_early_failure_snapshot import (
     build_snapshot_stats,
     categorical_counts,
 )
-from app.strategies.breakout_retest import BreakoutRetestStrategy, PARAMETERS_VERSION
+from app.strategies.breakout_retest import PARAMETERS_VERSION, BreakoutRetestStrategy
 from scripts.run_backtest import load_candles, parse_datetime
-
 
 EXPECTED = {
     "BTCUSDT": {"pnl": Decimal("-0.1391016840064235879634907285"), "trades": 49},
@@ -56,7 +55,7 @@ def _json_default(value: Any) -> str:
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     return str(value)
 
 
@@ -208,13 +207,13 @@ async def main() -> None:
 
     output_dir = Path("artifacts/diagnostics")
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     json_path = output_dir / f"breakout_retest_early_failure_snapshot_24h_{timestamp}.json"
     csv_path = output_dir / f"breakout_retest_early_failure_snapshot_24h_{timestamp}.csv"
 
     payload = {
         "metadata": {
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
             "strategy_version": PARAMETERS_VERSION,
             "snapshot_hours": 24,
             "parameter_optimization": False,

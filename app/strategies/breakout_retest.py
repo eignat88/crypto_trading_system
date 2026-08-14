@@ -9,7 +9,6 @@ from app.indicators.market_regime import MarketRegime
 from app.models import Fill, Signal
 from app.strategies.trend_dca import DCAConfig, TrendDCAStrategy
 
-
 PARAMETERS_VERSION = "breakout_retest_v1"
 RESISTANCE_LOOKBACK_BARS = 20
 RETEST_TIMEOUT_BARS = 24

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.backtest.commission_model import CommissionConfig, CommissionModel
 from app.database.connection import async_session_factory
-
 
 TREND_DOWN_EXIT_REASON = "Regime changed to TREND_DOWN"
 _QUANTITY_TOLERANCE = Decimal("1E-17")
@@ -93,8 +92,8 @@ def _utc(value: datetime | str) -> datetime:
     else:
         parsed = value
     if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _signal(row: dict[str, Any]) -> dict[str, Any]:

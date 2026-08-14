@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import ast
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,9 +19,9 @@ def _definition() -> HoldoutDefinition:
         symbols=("BTCUSDT", "ETHUSDT"),
         exchange="bybit",
         interval="1h",
-        period_start=datetime(2026, 8, 10, tzinfo=timezone.utc),
-        period_end=datetime(2027, 2, 6, tzinfo=timezone.utc),
-        unlock_at=datetime(2027, 2, 6, tzinfo=timezone.utc),
+        period_start=datetime(2026, 8, 10, tzinfo=UTC),
+        period_end=datetime(2027, 2, 6, tzinfo=UTC),
+        unlock_at=datetime(2027, 2, 6, tzinfo=UTC),
         indicator_model_version="indicators_v2_hourly_volatility",
         regime_model_version="regime_v2_hourly_volatility",
         execution_model_version="backtest_hardened_v1",
@@ -84,7 +84,7 @@ def test_health_gate_reuses_exact_as_of(monkeypatch, tmp_path):
         return SimpleNamespace(returncode=2)
 
     monkeypatch.setattr(update_holdout_data.subprocess, "run", fake_run)
-    as_of = datetime(2026, 8, 12, 13, 44, 29, tzinfo=timezone.utc)
+    as_of = datetime(2026, 8, 12, 13, 44, 29, tzinfo=UTC)
     definition = tmp_path / "holdout.json"
 
     code = update_holdout_data.run_health_gate(definition, as_of=as_of)
@@ -134,7 +134,7 @@ async def test_raw_to_dds_reuses_exact_as_of(monkeypatch):
             return FakeResult()
 
     monkeypatch.setattr(update_holdout_data, "async_session_factory", FakeSession)
-    as_of = datetime(2026, 8, 12, 13, 44, 29, tzinfo=timezone.utc)
+    as_of = datetime(2026, 8, 12, 13, 44, 29, tzinfo=UTC)
 
     await update_holdout_data.load_raw_to_dds(_definition(), as_of=as_of)
 

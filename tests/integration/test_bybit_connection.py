@@ -7,7 +7,6 @@ import pytest
 
 from app.config.settings import settings
 
-
 BYBIT_INTEGRATION_ENABLED = bool(
     os.getenv("BYBIT_API_KEY")
     and os.getenv("BYBIT_API_SECRET")

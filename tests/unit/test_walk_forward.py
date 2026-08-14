@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -9,8 +9,7 @@ from app.backtest.walk_forward import (
     run_fixed_parameter_walk_forward,
 )
 
-
-UTC = timezone.utc
+UTC = UTC
 
 
 def _candle(ts: datetime) -> dict:

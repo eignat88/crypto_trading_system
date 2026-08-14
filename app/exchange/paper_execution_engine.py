@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
-from datetime import datetime, timezone
 
 from app.exchange.fill_simulator import FillSimulator
 from app.exchange.paper_state_repository import PaperStateRepository
@@ -135,7 +135,7 @@ class PaperExecutionEngine:
 
         order_id = str(uuid4())
         fill_id = str(uuid4())
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         current = self.positions.get(request.symbol)
         old_qty = current.quantity if current else Decimal("0")

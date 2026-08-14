@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -11,11 +11,9 @@ from app.exchange.paper_execution_engine import PaperExecutionEngine
 from app.models.paper_fill_state import PaperFillState
 from app.models.paper_position_state import PaperPositionState
 from app.reporting.paper_pnl import (
+    EnginePriceProvider,
     PaperPnLTracker,
     PnLRecord,
-    EquityPoint,
-    TradingMetrics,
-    EnginePriceProvider,
 )
 
 
@@ -80,7 +78,7 @@ def test_calculate_fees() -> None:
             symbol="BTCUSDT",
             quantity=Decimal("1"),
             price=Decimal("50000"),
-            executed_at=datetime.now(timezone.utc),
+            executed_at=datetime.now(UTC),
         ),
         PaperFillState(
             fill_id="2",
@@ -88,7 +86,7 @@ def test_calculate_fees() -> None:
             symbol="BTCUSDT",
             quantity=Decimal("1"),
             price=Decimal("55000"),
-            executed_at=datetime.now(timezone.utc),
+            executed_at=datetime.now(UTC),
         ),
     ]
 
@@ -116,8 +114,8 @@ def test_record_snapshot() -> None:
     from app.models.candle import Candle
     engine._last_candle = Candle(
         symbol="BTCUSDT",
-        open_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
-        close_time=datetime(2024, 1, 1, 1, tzinfo=timezone.utc),
+        open_time=datetime(2024, 1, 1, tzinfo=UTC),
+        close_time=datetime(2024, 1, 1, 1, tzinfo=UTC),
         open=Decimal("52000"),
         high=Decimal("53000"),
         low=Decimal("51000"),
@@ -126,14 +124,14 @@ def test_record_snapshot() -> None:
     )
 
     record = tracker.record_snapshot(
-        timestamp=datetime(2024, 1, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, 1, tzinfo=UTC),
         sequence=1,
         engine=engine,
         realized_pnl=Decimal("0"),
     )
 
     assert isinstance(record, PnLRecord)
-    assert record.timestamp == datetime(2024, 1, 1, 1, tzinfo=timezone.utc)
+    assert record.timestamp == datetime(2024, 1, 1, 1, tzinfo=UTC)
     assert record.cash_balance == Decimal("9000")
     assert record.position_value == Decimal("5200")  # 0.1 * 52000
     assert record.equity == Decimal("14200")  # 9000 + 5200
@@ -145,7 +143,7 @@ def test_equity_curve_and_drawdown() -> None:
 
     # Record snapshots with increasing equity
     tracker.record_snapshot(
-        timestamp=datetime(2024, 1, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, 1, tzinfo=UTC),
         sequence=1,
         realized_pnl=Decimal("0"),
         unrealized_pnl=Decimal("500"),
@@ -153,7 +151,7 @@ def test_equity_curve_and_drawdown() -> None:
     # Equity = 10000 + 0 + 500 = 10500, peak = 10500
 
     tracker.record_snapshot(
-        timestamp=datetime(2024, 1, 1, 2, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, 2, tzinfo=UTC),
         sequence=2,
         realized_pnl=Decimal("0"),
         unrealized_pnl=Decimal("1000"),
@@ -161,7 +159,7 @@ def test_equity_curve_and_drawdown() -> None:
     # Equity = 10000 + 0 + 1000 = 11000, peak = 11000
 
     tracker.record_snapshot(
-        timestamp=datetime(2024, 1, 1, 3, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, 3, tzinfo=UTC),
         sequence=3,
         realized_pnl=Decimal("0"),
         unrealized_pnl=Decimal("500"),
@@ -184,7 +182,7 @@ def test_current_equity_after_snapshot_without_engine() -> None:
     tracker = PaperPnLTracker(initial_capital=Decimal("10000"))
 
     tracker.record_snapshot(
-        timestamp=datetime(2024, 1, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, 1, tzinfo=UTC),
         sequence=1,
         realized_pnl=Decimal("0"),
         unrealized_pnl=Decimal("500"),
@@ -195,7 +193,7 @@ def test_current_equity_after_snapshot_without_engine() -> None:
 
     # Record another snapshot with additional PnL
     tracker.record_snapshot(
-        timestamp=datetime(2024, 1, 1, 2, tzinfo=timezone.utc),
+        timestamp=datetime(2024, 1, 1, 2, tzinfo=UTC),
         sequence=2,
         realized_pnl=Decimal("200"),
         unrealized_pnl=Decimal("800"),
@@ -236,7 +234,7 @@ def test_reset_tracker() -> None:
 
     # Add some data
     tracker.record_snapshot(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         sequence=1,
         realized_pnl=Decimal("100"),
     )
@@ -259,8 +257,8 @@ def test_engine_price_provider() -> None:
     from app.models.candle import Candle
     engine._last_candle = Candle(
         symbol="BTCUSDT",
-        open_time=datetime(2024, 1, 1, tzinfo=timezone.utc),
-        close_time=datetime(2024, 1, 1, 1, tzinfo=timezone.utc),
+        open_time=datetime(2024, 1, 1, tzinfo=UTC),
+        close_time=datetime(2024, 1, 1, 1, tzinfo=UTC),
         open=Decimal("50000"),
         high=Decimal("51000"),
         low=Decimal("49000"),
@@ -302,8 +300,8 @@ async def test_pnl_tracking_integration() -> None:
     candles = [
         Candle(
             symbol="BTCUSDT",
-            open_time=datetime(2024, 1, 1, i, tzinfo=timezone.utc),
-            close_time=datetime(2024, 1, 1, i+1, tzinfo=timezone.utc),
+            open_time=datetime(2024, 1, 1, i, tzinfo=UTC),
+            close_time=datetime(2024, 1, 1, i+1, tzinfo=UTC),
             open=Decimal("50000") + Decimal(str(i * 100)),
             high=Decimal("51000") + Decimal(str(i * 100)),
             low=Decimal("49000") + Decimal(str(i * 100)),
@@ -338,7 +336,7 @@ async def test_pnl_tracking_integration() -> None:
 
     # Track final PnL
     final_record = tracker.record_snapshot(
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         sequence=execution_engine.last_sequence,
         engine=execution_engine,
     )

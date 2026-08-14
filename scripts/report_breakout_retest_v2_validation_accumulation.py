@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,9 +13,9 @@ from sqlalchemy import text
 from app.database.connection import async_session_factory
 from app.reporting.breakout_retest_v2_validation_accumulation import (
     REQUIRED_SYMBOLS,
-    StructuralCandleRecord,
     VALIDATION_END,
     VALIDATION_START,
+    StructuralCandleRecord,
     build_accumulation_status,
     effective_cutoff,
 )
@@ -28,7 +28,7 @@ def _parse_datetime(value: str) -> datetime:
     result = datetime.fromisoformat(normalized)
     if result.tzinfo is None:
         raise ValueError("--as-of must be timezone-aware")
-    return result.astimezone(timezone.utc)
+    return result.astimezone(UTC)
 
 
 def _json_default(value: Any) -> str:
@@ -119,7 +119,7 @@ async def main() -> None:
     )
     args = parser.parse_args()
 
-    as_of = datetime.now(timezone.utc) if args.as_of is None else _parse_datetime(args.as_of)
+    as_of = datetime.now(UTC) if args.as_of is None else _parse_datetime(args.as_of)
     cutoff = effective_cutoff(as_of)
     records_by_symbol = {
         symbol: await _load_structural_records(symbol=symbol, cutoff=cutoff)
@@ -171,13 +171,13 @@ async def main() -> None:
 
     output_dir = Path("artifacts/engineering")
     output_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     artifact = output_dir / f"breakout_retest_v2_validation_accumulation_{stamp}.json"
     artifact.write_text(
         json.dumps(
             {
                 "metadata": {
-                    "created_at": datetime.now(timezone.utc),
+                    "created_at": datetime.now(UTC),
                     "purpose": "holdout data accumulation health only; no performance",
                     "strategy_executed": False,
                     "performance_calculated": False,

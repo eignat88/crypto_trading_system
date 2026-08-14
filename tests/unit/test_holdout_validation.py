@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -34,7 +34,7 @@ def _definition():
 def test_holdout_is_sealed_before_unlock_even_if_strategy_exists():
     gate = evaluate_open_gate(
         _definition(),
-        now=datetime(2026, 8, 12, 13, 0, tzinfo=timezone.utc),
+        now=datetime(2026, 8, 12, 13, 0, tzinfo=UTC),
         strategy_implemented=True,
     )
     assert gate.opened is False
@@ -44,7 +44,7 @@ def test_holdout_is_sealed_before_unlock_even_if_strategy_exists():
 def test_holdout_remains_blocked_after_unlock_without_frozen_strategy():
     gate = evaluate_open_gate(
         _definition(),
-        now=datetime(2027, 2, 6, 0, 0, tzinfo=timezone.utc),
+        now=datetime(2027, 2, 6, 0, 0, tzinfo=UTC),
         strategy_implemented=False,
     )
     assert gate.opened is False
@@ -54,7 +54,7 @@ def test_holdout_remains_blocked_after_unlock_without_frozen_strategy():
 def test_holdout_opens_only_after_date_and_strategy_implementation():
     gate = evaluate_open_gate(
         _definition(),
-        now=datetime(2027, 2, 6, 0, 0, tzinfo=timezone.utc),
+        now=datetime(2027, 2, 6, 0, 0, tzinfo=UTC),
         strategy_implemented=True,
     )
     assert gate.opened is True
@@ -64,7 +64,7 @@ def test_holdout_opens_only_after_date_and_strategy_implementation():
 def test_expected_completed_candles_floors_partial_hour():
     count = expected_completed_candles(
         _definition(),
-        now=datetime(2026, 8, 12, 13, 59, 59, tzinfo=timezone.utc),
+        now=datetime(2026, 8, 12, 13, 59, 59, tzinfo=UTC),
     )
     assert count == 61
 
@@ -72,7 +72,7 @@ def test_expected_completed_candles_floors_partial_hour():
 def test_full_holdout_has_4320_hourly_candles():
     count = expected_completed_candles(
         _definition(),
-        now=datetime(2027, 2, 7, 0, 0, tzinfo=timezone.utc),
+        now=datetime(2027, 2, 7, 0, 0, tzinfo=UTC),
     )
     assert count == 4320
 

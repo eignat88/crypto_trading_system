@@ -5,7 +5,7 @@ from decimal import Decimal
 from statistics import median
 from typing import Any
 
-from app.reporting.entry_filter_counterfactual import CounterfactualReport, CounterfactualTrade
+from app.reporting.entry_filter_counterfactual import CounterfactualReport
 
 HORIZONS = (6, 12, 24)
 TARGET_GROUPS = ("FILTERED_WINNER", "FILTERED_TD_LOSS")

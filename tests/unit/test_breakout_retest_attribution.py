@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -10,7 +10,7 @@ from app.reporting.breakout_retest_attribution import (
     reconstruct_breakout_retest_trades,
 )
 
-UTC = timezone.utc
+UTC = UTC
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
 SYMBOL = "BTCUSDT"
 

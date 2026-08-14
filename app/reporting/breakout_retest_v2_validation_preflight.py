@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 import hashlib
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, Iterable
 
-
-RESEARCH_EXHAUSTED_END = datetime(2026, 8, 10, 0, 0, tzinfo=timezone.utc)
+RESEARCH_EXHAUSTED_END = datetime(2026, 8, 10, 0, 0, tzinfo=UTC)
 REQUIRED_SYMBOLS = ("BTCUSDT", "ETHUSDT")
 REQUIRED_INTERVAL = "1h"
 SEGMENT_DAYS = 60
@@ -93,7 +92,7 @@ class ValidationPreflightResult:
 def _utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         raise ValueError("validation timestamps must be timezone-aware UTC")
-    result = value.astimezone(timezone.utc)
+    result = value.astimezone(UTC)
     if result.utcoffset() != timedelta(0):
         raise ValueError("validation timestamps must normalize to UTC")
     return result
@@ -172,10 +171,10 @@ def validate_symbol_records(
         len(rows) == expected
         and duplicates == 0
         and gaps == 0
-        and (not rows or rows[0].open_time.astimezone(timezone.utc) == start)
+        and (not rows or rows[0].open_time.astimezone(UTC) == start)
         and (
             not rows
-            or rows[-1].open_time.astimezone(timezone.utc)
+            or rows[-1].open_time.astimezone(UTC)
             == end - timedelta(hours=1)
         )
     )
@@ -188,8 +187,8 @@ def validate_symbol_records(
         symbol=symbol,
         candle_count=len(rows),
         expected_candle_count=expected,
-        first_open_time=None if not rows else rows[0].open_time.astimezone(timezone.utc),
-        last_open_time=None if not rows else rows[-1].open_time.astimezone(timezone.utc),
+        first_open_time=None if not rows else rows[0].open_time.astimezone(UTC),
+        last_open_time=None if not rows else rows[-1].open_time.astimezone(UTC),
         gaps=gaps,
         duplicates=duplicates,
         missing_ema20=missing_ema20,
@@ -253,7 +252,7 @@ def dataset_structure_fingerprint(
                     (
                         symbol,
                         str(row.candle_id),
-                        row.open_time.astimezone(timezone.utc).isoformat(),
+                        row.open_time.astimezone(UTC).isoformat(),
                         str(int(row.has_ema20)),
                         str(int(row.has_ema50)),
                         str(int(row.has_ema200)),

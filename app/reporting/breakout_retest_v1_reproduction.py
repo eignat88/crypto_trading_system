@@ -3,17 +3,17 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import asdict, dataclass, is_dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import Enum
 from typing import Any
 
 from app.backtest.backtest_engine import BacktestConfig, BacktestEngine, BacktestResult
 from app.backtest.walk_forward import WalkForwardConfig, generate_walk_forward_windows
-from app.strategies.breakout_retest import BreakoutRetestStrategy, PARAMETERS_VERSION
+from app.strategies.breakout_retest import PARAMETERS_VERSION, BreakoutRetestStrategy
 
-FROZEN_START = datetime(2024, 8, 10, tzinfo=timezone.utc)
-FROZEN_END = datetime(2026, 8, 10, tzinfo=timezone.utc)
+FROZEN_START = datetime(2024, 8, 10, tzinfo=UTC)
+FROZEN_END = datetime(2026, 8, 10, tzinfo=UTC)
 FROZEN_INTERVAL = "1h"
 FROZEN_TRAIN_DAYS = 180
 FROZEN_TEST_DAYS = 60
@@ -85,7 +85,7 @@ def _canonical(value: Any) -> Any:
     if isinstance(value, datetime):
         if value.tzinfo is None:
             raise ValueError("Audit datetime must be timezone-aware")
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     if isinstance(value, Enum):
         return str(value.value)
     if is_dataclass(value):
@@ -129,7 +129,7 @@ def validate_frozen_candles(candles: list[dict[str, Any]], symbol: str) -> None:
         timestamp = candle.get("open_time")
         if not isinstance(timestamp, datetime) or timestamp.tzinfo is None:
             raise ValueError("All candle open_time values must be timezone-aware datetime")
-        timestamp = timestamp.astimezone(timezone.utc)
+        timestamp = timestamp.astimezone(UTC)
         if not FROZEN_START <= timestamp < FROZEN_END:
             raise ValueError(
                 f"Candle outside frozen reproduction range: {timestamp.isoformat()}"

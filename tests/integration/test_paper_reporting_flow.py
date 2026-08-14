@@ -3,18 +3,15 @@
 Tests the full cycle: Runtime -> Engine -> Trade -> Metrics Collector -> Report.
 """
 
-import pytest
-from datetime import datetime, timezone
+import tempfile
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
-import tempfile
 
-from app.reporting.paper_pnl import PaperPnLTracker
 from app.reporting.paper_metrics import (
     PaperMetricsCollector,
-    EquityCurveReport,
-    PerformanceSummary,
 )
+from app.reporting.paper_pnl import PaperPnLTracker
 
 
 class TestPaperReportingFlow:
@@ -27,7 +24,7 @@ class TestPaperReportingFlow:
         collector = PaperMetricsCollector(pnl_tracker=tracker)
 
         # Simulate trade events
-        trade_time = datetime.now(timezone.utc)
+        trade_time = datetime.now(UTC)
 
         # Buy order - record fee and slippage directly in tracker
         tracker._fees_paid = Decimal("5")
@@ -42,7 +39,7 @@ class TestPaperReportingFlow:
         )
 
         # Sell order at profit - simulate realized PnL
-        sell_time = datetime.now(timezone.utc)
+        sell_time = datetime.now(UTC)
         tracker._fees_paid = Decimal("10.2")  # Total fees
         tracker._slippage_total = Decimal("3")  # Total slippage
 
@@ -70,7 +67,7 @@ class TestPaperReportingFlow:
         tracker = PaperPnLTracker(initial_capital=Decimal("10000"))
         collector = PaperMetricsCollector(pnl_tracker=tracker)
 
-        trade_time = datetime.now(timezone.utc)
+        trade_time = datetime.now(UTC)
 
         # Buy order - record fees
         tracker._fees_paid = Decimal("3")
@@ -83,7 +80,7 @@ class TestPaperReportingFlow:
         )
 
         # Sell order at loss - simulate realized loss
-        sell_time = datetime.now(timezone.utc)
+        sell_time = datetime.now(UTC)
         tracker._fees_paid = Decimal("5.8")  # Total fees
 
         collector.snapshot_equity(
@@ -107,7 +104,7 @@ class TestPaperReportingFlow:
         )
         collector = PaperMetricsCollector(pnl_tracker=tracker)
 
-        trade_time = datetime.now(timezone.utc)
+        trade_time = datetime.now(UTC)
 
         # Multiple trades with fees - directly set in tracker
         for i in range(5):
@@ -133,7 +130,7 @@ class TestPaperReportingFlow:
         tracker = PaperPnLTracker(initial_capital=Decimal("10000"))
         collector = PaperMetricsCollector(pnl_tracker=tracker)
 
-        trade_time = datetime.now(timezone.utc)
+        trade_time = datetime.now(UTC)
 
         # Trade with expected vs actual price difference - directly set in tracker
         tracker._slippage_total = Decimal("10")
@@ -157,7 +154,7 @@ class TestPaperReportingFlow:
         tracker = PaperPnLTracker(initial_capital=Decimal("10000"))
         collector = PaperMetricsCollector(pnl_tracker=tracker)
 
-        base_time = datetime.now(timezone.utc)
+        base_time = datetime.now(UTC)
 
         # Simulate multiple candle processing
         for i in range(10):
@@ -167,7 +164,7 @@ class TestPaperReportingFlow:
                 base_time.day,
                 base_time.hour,
                 base_time.minute + i,
-                tzinfo=timezone.utc,
+                tzinfo=UTC,
             )
 
             collector.record_candle_processed(
@@ -199,7 +196,7 @@ class TestPaperReportingFlow:
         tracker = PaperPnLTracker(initial_capital=Decimal("10000"))
         collector = PaperMetricsCollector(pnl_tracker=tracker)
 
-        trade_time = datetime.now(timezone.utc)
+        trade_time = datetime.now(UTC)
 
         # Add some trades
         collector.record_trade(
@@ -233,7 +230,7 @@ class TestPaperReportingFlow:
         tracker = PaperPnLTracker(initial_capital=Decimal("10000"))
         collector = PaperMetricsCollector(pnl_tracker=tracker)
 
-        trade_time = datetime.now(timezone.utc)
+        trade_time = datetime.now(UTC)
 
         # Add data
         collector.record_trade(
@@ -264,11 +261,11 @@ class TestPaperReportingFlow:
         collector = PaperMetricsCollector(pnl_tracker=tracker)
 
         # Record multiple snapshots with varying losses
-        base_time = datetime.now(timezone.utc)
+        base_time = datetime.now(UTC)
         for i in range(5):
             # Calculate progressively worse unrealized PnL
             unrealized = Decimal("-50") - (Decimal(str(i)) * Decimal("10"))
-            
+
             collector.snapshot_equity(
                 timestamp=base_time,
                 sequence=i,
@@ -298,7 +295,7 @@ class TestPaperReportingFlow:
 
         # Record snapshot to build equity curve
         collector.snapshot_equity(
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             sequence=1,
             realized_pnl=Decimal("295"),  # Sum of trade PnL
             unrealized_pnl=Decimal("0"),

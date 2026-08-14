@@ -1,5 +1,5 @@
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.indicators.market_regime import MarketRegime
@@ -9,8 +9,7 @@ from app.strategies.trend_dca_confirm3 import (
     TrendDCAConfirm3Strategy,
 )
 
-
-UTC = timezone.utc
+UTC = UTC
 
 
 def _candle() -> dict:

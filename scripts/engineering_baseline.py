@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -101,11 +101,11 @@ async def capture_current_baseline(exchange: str = "bybit") -> EngineeringBaseli
 def _write_candidate(baseline: EngineeringBaseline) -> Path:
     output_dir = Path("artifacts/engineering")
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output = output_dir / f"versioned_engineering_baseline_candidate_{timestamp}.json"
     payload = {
         "metadata": {
-            "created_at": datetime.now(timezone.utc).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
             "git_commit": _git_commit(),
             "purpose": "engineering reproducibility only; not strategy performance validation",
             "independent_validation_opened": False,

@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from app.backtest.dataset_fingerprint import build_dataset_fingerprint
@@ -10,7 +10,7 @@ def _candles() -> list[dict]:
         {
             "symbol": "BTCUSDT",
             "interval": "1h",
-            "open_time": datetime(2026, 8, 10, 0, 0, tzinfo=timezone.utc),
+            "open_time": datetime(2026, 8, 10, 0, 0, tzinfo=UTC),
             "open": Decimal("100"),
             "high": Decimal("101"),
             "low": Decimal("99"),

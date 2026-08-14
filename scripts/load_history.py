@@ -84,6 +84,11 @@ def parse_args():
         action="store_true",
         help="Resume from last checkpoint",
     )
+    parser.add_argument(
+        "--skip-indicators",
+        action="store_true",
+        help="Skip indicator calculation after loading candles",
+    )
     return parser.parse_args()
 
 
@@ -140,6 +145,7 @@ async def main():
                     interval=interval,
                     start_date=current_start,
                     end_date=end_date,
+                    calculate_indicators=not args.skip_indicators,
                 )
 
                 logger.info(

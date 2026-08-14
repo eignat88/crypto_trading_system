@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -41,7 +41,7 @@ class PostgresPaperRepository:
             """
         )
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         await self.session.execute(
             query,
@@ -81,7 +81,7 @@ class PostgresPaperRepository:
                 "quantity": Decimal(str(fill["quantity"])),
                 "price": Decimal(str(fill["price"])),
                 "commission": Decimal(str(fill.get("commission", "0"))),
-                "executed_at": fill.get("executed_at", datetime.now(timezone.utc)),
+                "executed_at": fill.get("executed_at", datetime.now(UTC)),
             },
         )
         await self.session.commit()

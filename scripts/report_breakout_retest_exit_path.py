@@ -5,7 +5,7 @@ import asyncio
 import csv
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -19,7 +19,7 @@ from app.reporting.breakout_retest_exit_path import (
     analyze_exit_path,
     build_exit_path_stats,
 )
-from app.strategies.breakout_retest import BreakoutRetestStrategy, PARAMETERS_VERSION
+from app.strategies.breakout_retest import PARAMETERS_VERSION, BreakoutRetestStrategy
 from scripts.run_backtest import load_candles, parse_datetime
 
 EXPECTED = {
@@ -33,7 +33,7 @@ def _json_default(value: Any) -> str:
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     return str(value)
 
 
@@ -202,14 +202,14 @@ async def main() -> None:
 
     output_dir = Path("artifacts/diagnostics")
     output_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     json_path = output_dir / f"breakout_retest_exit_path_{stamp}.json"
     csv_path = output_dir / f"breakout_retest_exit_path_{stamp}.csv"
     json_path.write_text(
         json.dumps(
             {
                 "metadata": {
-                    "created_at": datetime.now(timezone.utc),
+                    "created_at": datetime.now(UTC),
                     "strategy_version": PARAMETERS_VERSION,
                     "symbols": args.symbols,
                     "interval": args.interval,

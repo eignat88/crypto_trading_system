@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -32,7 +32,7 @@ def _result() -> BacktestResult:
         symbol="BTCUSDT",
         price=Decimal("100"),
         quantity=Decimal("1"),
-        timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2025, 1, 1, tzinfo=UTC),
         reason="test",
         strategy="BreakoutRetest",
         parameters_version="breakout_retest_v1",
@@ -43,7 +43,7 @@ def _result() -> BacktestResult:
         side="buy",
         quantity=Decimal("1"),
         requested_price=Decimal("100"),
-        created_at=datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, 1, tzinfo=UTC),
     )
     risk = RiskDecision(
         order_id="order-1",
@@ -62,7 +62,7 @@ def _result() -> BacktestResult:
         quantity=Decimal("1"),
         price=Decimal("100.1"),
         commission=Decimal("0.1"),
-        timestamp=datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
+        timestamp=datetime(2025, 1, 1, 1, tzinfo=UTC),
     )
     return BacktestResult(
         portfolio=portfolio,
@@ -98,8 +98,8 @@ def _symbol_result(
 
 
 def test_frozen_protocol_constants_match_research_control() -> None:
-    assert reproduction.FROZEN_START == datetime(2024, 8, 10, tzinfo=timezone.utc)
-    assert reproduction.FROZEN_END == datetime(2026, 8, 10, tzinfo=timezone.utc)
+    assert reproduction.FROZEN_START == datetime(2024, 8, 10, tzinfo=UTC)
+    assert reproduction.FROZEN_END == datetime(2026, 8, 10, tzinfo=UTC)
     assert reproduction.FROZEN_INTERVAL == "1h"
     assert reproduction.FROZEN_INITIAL_BALANCE == Decimal("500")
     assert reproduction.FROZEN_SEED == 42

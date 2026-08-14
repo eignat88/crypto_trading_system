@@ -4,7 +4,7 @@ import argparse
 import asyncio
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -18,7 +18,7 @@ def _json_default(value: Any) -> str:
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     if isinstance(value, UUID):
         return str(value)
     return str(value)
@@ -97,11 +97,11 @@ async def main() -> None:
 
     output_dir = Path("artifacts/diagnostics")
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     output_file = output_dir / f"entry_quality_distribution_{timestamp}.json"
     payload = {
         "metadata": {
-            "created_at": datetime.now(timezone.utc),
+            "created_at": datetime.now(UTC),
             "features": [
                 "close_to_ema200",
                 "ema200_slope_10",

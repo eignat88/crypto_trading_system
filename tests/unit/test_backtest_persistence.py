@@ -1,5 +1,5 @@
 from copy import deepcopy
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -98,14 +98,14 @@ def test_run_id_is_deterministic_for_same_fingerprint():
 
 def test_as_utc_datetime_parses_z_suffix():
     result = _as_utc_datetime("2026-08-10T12:02:50.532733Z")
-    assert result == datetime(2026, 8, 10, 12, 2, 50, 532733, tzinfo=timezone.utc)
+    assert result == datetime(2026, 8, 10, 12, 2, 50, 532733, tzinfo=UTC)
 
 
 def test_as_utc_datetime_converts_offset_to_utc():
     result = _as_utc_datetime("2026-08-10T15:02:50+03:00")
-    assert result == datetime(2026, 8, 10, 12, 2, 50, tzinfo=timezone.utc)
+    assert result == datetime(2026, 8, 10, 12, 2, 50, tzinfo=UTC)
 
 
 def test_as_utc_datetime_treats_naive_datetime_as_utc():
     result = _as_utc_datetime(datetime(2026, 8, 10, 12, 2, 50))
-    assert result == datetime(2026, 8, 10, 12, 2, 50, tzinfo=timezone.utc)
+    assert result == datetime(2026, 8, 10, 12, 2, 50, tzinfo=UTC)

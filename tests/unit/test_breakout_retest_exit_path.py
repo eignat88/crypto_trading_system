@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -10,7 +10,7 @@ from app.reporting.breakout_retest_exit_path import (
     build_exit_path_stats,
 )
 
-UTC = timezone.utc
+UTC = UTC
 START = datetime(2026, 1, 1, tzinfo=UTC)
 
 

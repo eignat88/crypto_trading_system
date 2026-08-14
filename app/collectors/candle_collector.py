@@ -6,6 +6,7 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.collectors.indicator_collector import IndicatorCollector
 from app.database.connection import async_session_factory
 from app.exchange.base_exchange import BaseExchange, Candle
 from app.exchange.intervals import interval_duration
@@ -25,6 +26,7 @@ class CandleCollector:
 
     def __init__(self, exchange: BaseExchange):
         self.exchange = exchange
+        self.indicator_collector = IndicatorCollector()
 
     async def load_historical_candles(
         self,
@@ -33,8 +35,18 @@ class CandleCollector:
         start_date: datetime,
         end_date: datetime,
         batch_size: int = 1000,
+        calculate_indicators: bool = True,
     ) -> int:
-        """Load historical candles with checkpoint support."""
+        """Load historical candles with checkpoint support.
+        
+        Args:
+            symbol: Trading symbol (e.g., BTCUSDT)
+            interval: Candle interval (e.g., 1h, 1d)
+            start_date: Start of the date range
+            end_date: End of the date range
+            batch_size: Number of candles per batch
+            calculate_indicators: If True, calculate indicators after loading candles
+        """
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
         total_loaded = 0
@@ -48,6 +60,7 @@ class CandleCollector:
             interval=interval,
             start=start_date.isoformat(),
             end=end_date.isoformat(),
+            calculate_indicators=calculate_indicators,
         )
 
         while current_start < end_date:
@@ -91,6 +104,27 @@ class CandleCollector:
                         session, symbol, interval, current_start, max_open_time, loaded_count
                     )
                 total_loaded += loaded_count
+
+                # Calculate indicators after storing candles
+                if calculate_indicators and loaded_count > 0:
+                    try:
+                        await session.commit()
+                        indicators_calculated = await self.indicator_collector.calculate_and_store_indicators(
+                            symbol=symbol,
+                            interval=interval,
+                        )
+                        logger.info(
+                            "indicators_calculated",
+                            symbol=symbol,
+                            interval=interval,
+                            count=indicators_calculated,
+                        )
+                    except Exception:
+                        logger.exception(
+                            "indicator_calculation_failed",
+                            symbol=symbol,
+                            interval=interval,
+                        )
 
             logger.info(
                 "batch_loaded",

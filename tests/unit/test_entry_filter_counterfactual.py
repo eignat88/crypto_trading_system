@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -14,7 +14,7 @@ from app.reporting.entry_filter_counterfactual import (
     summarize_features,
 )
 
-UTC = timezone.utc
+UTC = UTC
 BASE = datetime(2026, 1, 1, tzinfo=UTC)
 
 

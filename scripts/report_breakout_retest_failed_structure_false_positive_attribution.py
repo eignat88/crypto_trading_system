@@ -5,15 +5,21 @@ import asyncio
 import csv
 import json
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from app.backtest.backtest_engine import BacktestConfig, BacktestEngine
-from app.backtest.walk_forward import WalkForwardConfig, generate_walk_forward_windows, run_fixed_parameter_walk_forward
+from app.backtest.walk_forward import (
+    WalkForwardConfig,
+    generate_walk_forward_windows,
+    run_fixed_parameter_walk_forward,
+)
 from app.reporting.breakout_retest_attribution import reconstruct_breakout_retest_trades
-from app.reporting.breakout_retest_failed_structure_counterfactual import build_failed_structure_counterfactual
+from app.reporting.breakout_retest_failed_structure_counterfactual import (
+    build_failed_structure_counterfactual,
+)
 from app.reporting.breakout_retest_failed_structure_false_positive_attribution import (
     build_false_positive_attribution_trade,
     build_false_positive_stats,
@@ -37,7 +43,7 @@ def _json_default(value: Any) -> str:
     if isinstance(value, Decimal):
         return str(value)
     if isinstance(value, datetime):
-        return value.astimezone(timezone.utc).isoformat()
+        return value.astimezone(UTC).isoformat()
     return str(value)
 
 
@@ -217,7 +223,7 @@ async def main() -> None:
 
     output_dir = Path("artifacts/diagnostics")
     output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     json_path = output_dir / f"breakout_retest_failed_structure_false_positive_attribution_{timestamp}.json"
     csv_path = output_dir / f"breakout_retest_failed_structure_false_positive_attribution_{timestamp}.csv"
     json_path.write_text(json.dumps({

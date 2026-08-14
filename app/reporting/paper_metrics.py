@@ -8,19 +8,17 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from app.reporting.paper_pnl import (
+    EquityPoint,
     PaperPnLTracker,
     PnLRecord,
-    EquityPoint,
-    TradingMetrics,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -338,7 +336,7 @@ class PaperMetricsCollector:
             include_equity_curve: Whether to include detailed equity curve
         """
         report_data: dict[str, Any] = {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
         performance = self.generate_performance_summary()

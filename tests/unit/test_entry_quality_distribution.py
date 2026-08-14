@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import uuid4
 
@@ -9,7 +9,7 @@ from app.reporting.entry_quality_distribution import (
     percentile,
 )
 
-UTC = timezone.utc
+UTC = UTC
 
 
 def _record(*, value: str, group: str, pnl: str, age: int = 10) -> EntryQualityRecord:
