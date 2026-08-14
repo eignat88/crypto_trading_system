@@ -3,7 +3,11 @@ from decimal import Decimal
 
 import pytest
 
-from app.exchange.paper_execution_engine import PaperExecutionEngine
+from app.exchange.paper_execution_engine import (
+    ExecutionRequest,
+    OrderSide,
+    PaperExecutionEngine,
+)
 from app.exchange.paper_market_data import PaperMarketData
 from app.models.candle import Candle
 
@@ -37,7 +41,6 @@ def test_cutoff_does_not_allow_future_candle_processing() -> None:
 
     assert engine.last_candle is not None
     assert engine.last_candle.close == Decimal("60000")
-
     assert engine.last_sequence == 1
 
 
@@ -45,8 +48,10 @@ def test_warmup_without_market_data_blocks_execution() -> None:
     engine = PaperExecutionEngine()
 
     with pytest.raises(RuntimeError):
-        engine.execute_market_order(
-            symbol="BTCUSDT",
-            quantity=Decimal("0.1"),
-            candle=None,
+        engine.execute(
+            ExecutionRequest(
+                symbol="BTCUSDT",
+                side=OrderSide.BUY,
+                quantity=Decimal("0.1"),
+            )
         )
