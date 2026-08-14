@@ -387,6 +387,10 @@ class PaperPnLTracker:
         """
         metrics = TradingMetrics()
 
+        # Always include fees and slippage
+        metrics.total_fees = self._fees_paid
+        metrics.total_slippage = self._slippage_total
+
         if not self._trade_pnl:
             return metrics
 
@@ -422,9 +426,6 @@ class PaperPnLTracker:
             max_dd_pct = max(p.drawdown_pct for p in self._equity_curve)
             metrics.max_drawdown = max_dd
             metrics.max_drawdown_pct = max_dd_pct
-
-        metrics.total_fees = self._fees_paid
-        metrics.total_slippage = self._slippage_total
 
         return metrics
 
