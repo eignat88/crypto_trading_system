@@ -7,9 +7,6 @@ __pycache__/
 .venv/
 venv/
 node_modules/
-dist/
-build/
-.target/
 
 # Logs and temp files
 *.log
@@ -19,31 +16,34 @@ build/
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
 # Editors
 .vscode/
 .idea/
 
-# Coverage reports
+# Coverage
 .coverage
 coverage/
 htmlcov/
 
+# Distribution artifacts
+dist/
+build/
+target/
+*.egg-info/
+
 # Python specific
-*.pyc
-__pycache__/
 *.pyo
 *.pyd
 .Python
 *.so
+*.dylib
 
-# Testing
-.pytest_cache/
-.mypy_cache/
-.hypothesis/
-
-# OS generated files
+# System files
 .DS_Store
 Thumbs.db
+
+# Original rules preserved
+*.log
 ```

@@ -335,14 +335,17 @@ class PaperPnLTracker:
                         position_values.append(position.quantity * price)
 
             position_value = sum(position_values, Decimal("0"))
+            # When using engine, equity = cash + position value (which already reflects PnL)
+            equity = cash_balance + position_value
         else:
             cash_balance = Decimal("0")
             position_value = Decimal("0")
             realized_pnl = realized_pnl or Decimal("0")
             unrealized_pnl = unrealized_pnl or Decimal("0")
+            # When no engine, equity = initial capital + PnL
+            equity = self.initial_capital + realized_pnl + unrealized_pnl
 
         total_pnl = realized_pnl + unrealized_pnl
-        equity = cash_balance + position_value
 
         # Update peak equity for drawdown calculation
         if equity > self._peak_equity:
