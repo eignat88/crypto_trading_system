@@ -249,6 +249,22 @@ class PaperMetricsCollector:
         peak_equity = max(p.equity for p in equity_points)
         trough_equity = min(p.equity for p in equity_points)
 
+        # Calculate maximum drawdown properly from all equity points
+        max_drawdown = Decimal("0")
+        max_drawdown_pct = Decimal("0")
+        running_peak = starting_equity
+        
+        for point in equity_points:
+            if point.equity > running_peak:
+                running_peak = point.equity
+            drawdown = running_peak - point.equity
+            drawdown_pct = (drawdown / running_peak * Decimal("100")) if running_peak > 0 else Decimal("0")
+            
+            if drawdown > max_drawdown:
+                max_drawdown = drawdown
+            if drawdown_pct > max_drawdown_pct:
+                max_drawdown_pct = drawdown_pct
+
         return EquityCurveReport(
             start_date=start_point.timestamp,
             end_date=end_point.timestamp,
@@ -258,8 +274,8 @@ class PaperMetricsCollector:
             trough_equity=trough_equity,
             total_return=total_return,
             total_return_pct=total_return_pct,
-            max_drawdown=self.pnl_tracker.current_drawdown,
-            max_drawdown_pct=self.pnl_tracker.current_drawdown_pct,
+            max_drawdown=max_drawdown,
+            max_drawdown_pct=max_drawdown_pct,
             num_points=len(equity_points),
             equity_points=equity_points,
         )
