@@ -22,12 +22,12 @@ class PnLRecord:
     """Single PnL measurement at a point in time."""
 
     timestamp: datetime
+    equity: Decimal
     realized_pnl: Decimal = Decimal("0")
     unrealized_pnl: Decimal = Decimal("0")
     total_pnl: Decimal = Decimal("0")
     fees_paid: Decimal = Decimal("0")
     slippage: Decimal = Decimal("0")
-    equity: Decimal = Decimal("0")
     cash_balance: Decimal = Decimal("0")
     position_value: Decimal = Decimal("0")
 
@@ -125,9 +125,7 @@ class PaperPnLTracker:
         """Calculate current equity."""
         if not self._pnl_records:
             return self.initial_capital
-        equity = self._pnl_records[-1].equity
-        logger.debug(f"current_equity: {equity}, pnl_records count: {len(self._pnl_records)}")
-        return equity
+        return self._pnl_records[-1].equity
 
     @property
     def current_drawdown(self) -> Decimal:
@@ -348,8 +346,6 @@ class PaperPnLTracker:
             position_value = Decimal("0")
             equity = self.initial_capital + total_pnl
 
-        logger.debug(f"record_snapshot: realized_pnl={realized_pnl_val}, unrealized_pnl={unrealized_pnl_val}, equity={equity}")
-
         # Update peak equity for drawdown calculation
         if equity > self._peak_equity:
             self._peak_equity = equity
@@ -359,12 +355,12 @@ class PaperPnLTracker:
 
         record = PnLRecord(
             timestamp=timestamp,
+            equity=equity,
             realized_pnl=realized_pnl_val,
             unrealized_pnl=unrealized_pnl_val,
             total_pnl=total_pnl,
             fees_paid=self._fees_paid,
             slippage=self._slippage_total,
-            equity=equity,
             cash_balance=cash_balance,
             position_value=position_value,
         )
