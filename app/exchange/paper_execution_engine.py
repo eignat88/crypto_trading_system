@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import Enum
@@ -84,7 +85,18 @@ class PaperExecutionEngine:
             )
         )
 
-    async def on_market_event(self, event: MarketEvent) -> None:
+    def _schedule_save_state(self) -> None:
+        if self.state_repository is None:
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+
+        loop.create_task(self._save_state())
+
+    def on_market_event(self, event: MarketEvent) -> None:
         event.candle.validate()
 
         if event.sequence <= self._last_sequence:
@@ -96,11 +108,10 @@ class PaperExecutionEngine:
 
         self._last_sequence = event.sequence
         self._last_candle = event.candle
+        self._schedule_save_state()
 
-        await self._save_state()
-
-    async def on_candle(self, candle: Candle) -> None:
-        await self.on_market_event(
+    def on_candle(self, candle: Candle) -> None:
+        self.on_market_event(
             MarketEvent(candle=candle, sequence=self._last_sequence + 1)
         )
 
