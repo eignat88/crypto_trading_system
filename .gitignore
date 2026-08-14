@@ -1,87 +1,49 @@
-# Python
+```
+# Compiled and build artifacts
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 
-# Virtual Environment
+# Dependencies
 .venv/
 venv/
-env/
-ENV/
+node_modules/
+dist/
+build/
+.target/
 
-# IDE
-.vscode/
-.idea/
+# Logs and temp files
+*.log
+*.tmp
 *.swp
-*.swo
-*~
 
 # Environment
 .env
 .env.local
-.env.production
+*.env.*
 
-# Logs
-logs/
-*.log
+# Editors
+.vscode/
+.idea/
 
-# Local PostgreSQL diagnostics (may contain host and schema details)
-monitoring/diagnostic_reports/
-
-# Data
-data/
-
-# Database
-*.db
-*.sqlite3
-
-# Coverage
-htmlcov/
+# Coverage reports
 .coverage
-.coverage.*
-coverage.xml
+coverage/
+htmlcov/
+
+# Python specific
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+*.so
 
 # Testing
 .pytest_cache/
 .mypy_cache/
-.ruff_cache/
+.hypothesis/
 
-# Distribution
-*.tar.gz
-*.whl
-
-# Secrets (double check!)
-secrets/
-credentials/
-*.pem
-*.key
-
-# CI logs
-logs/ci/
-logs/readiness_*
-
-# Local backtest artifacts
-artifacts/backtests/
-
-# Generated local diagnostics and analysis outputs
-artifacts/diagnostics/
-artifacts/engineering/
-artifacts/walk_forward/
-indicator_audit_source.txt
+# OS generated files
+.DS_Store
+Thumbs.db
+```
