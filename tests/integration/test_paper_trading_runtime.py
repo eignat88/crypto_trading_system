@@ -12,6 +12,7 @@ def test_runtime_processes_market_data_to_execution_engine():
         Candle(
             symbol="BTCUSDT",
             open_time=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            close_time=datetime(2026, 1, 1, 0, 1, tzinfo=timezone.utc),
             open=Decimal("100"),
             high=Decimal("110"),
             low=Decimal("90"),
