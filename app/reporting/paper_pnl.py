@@ -22,12 +22,12 @@ class PnLRecord:
     """Single PnL measurement at a point in time."""
 
     timestamp: datetime
+    equity: Decimal = Decimal("0")
     realized_pnl: Decimal = Decimal("0")
     unrealized_pnl: Decimal = Decimal("0")
     total_pnl: Decimal = Decimal("0")
     fees_paid: Decimal = Decimal("0")
     slippage: Decimal = Decimal("0")
-    equity: Decimal = Decimal("0")
     cash_balance: Decimal = Decimal("0")
     position_value: Decimal = Decimal("0")
 
@@ -313,17 +313,21 @@ class PaperPnLTracker:
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
 
+        # Normalize PnL values
+        realized_pnl_val = realized_pnl if realized_pnl is not None else Decimal("0")
+        unrealized_pnl_val = unrealized_pnl if unrealized_pnl is not None else Decimal("0")
+        total_pnl = realized_pnl_val + unrealized_pnl_val
+
         if engine is not None:
-            if realized_pnl is None:
-                # Would need fills history - simplified here
-                realized_pnl = Decimal("0")
+            # Use engine state for cash and position values
+            price_provider = EnginePriceProvider(engine)
 
             if unrealized_pnl is None:
-                price_provider = EnginePriceProvider(engine)
-                unrealized_pnl = self.calculate_unrealized_pnl(
+                unrealized_pnl_val = self.calculate_unrealized_pnl(
                     engine.positions,
                     price_provider,
                 )
+                total_pnl = realized_pnl_val + unrealized_pnl_val
 
             cash_balance = engine.cash_balance
             position_values = []
@@ -335,17 +339,12 @@ class PaperPnLTracker:
                         position_values.append(position.quantity * price)
 
             position_value = sum(position_values, Decimal("0"))
-            # When using engine, equity = cash + position value (which already reflects PnL)
             equity = cash_balance + position_value
         else:
-            cash_balance = Decimal("0")
+            # No engine: calculate equity from initial capital + PnL
+            cash_balance = self.initial_capital
             position_value = Decimal("0")
-            realized_pnl = realized_pnl or Decimal("0")
-            unrealized_pnl = unrealized_pnl or Decimal("0")
-            # When no engine, equity = initial capital + PnL
-            equity = self.initial_capital + realized_pnl + unrealized_pnl
-
-        total_pnl = realized_pnl + unrealized_pnl
+            equity = self.initial_capital + total_pnl
 
         # Update peak equity for drawdown calculation
         if equity > self._peak_equity:
@@ -356,12 +355,12 @@ class PaperPnLTracker:
 
         record = PnLRecord(
             timestamp=timestamp,
-            realized_pnl=realized_pnl,
-            unrealized_pnl=unrealized_pnl,
+            equity=equity,
+            realized_pnl=realized_pnl_val,
+            unrealized_pnl=unrealized_pnl_val,
             total_pnl=total_pnl,
             fees_paid=self._fees_paid,
             slippage=self._slippage_total,
-            equity=equity,
             cash_balance=cash_balance,
             position_value=position_value,
         )

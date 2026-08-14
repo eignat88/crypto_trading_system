@@ -253,13 +253,13 @@ class PaperMetricsCollector:
         max_drawdown = Decimal("0")
         max_drawdown_pct = Decimal("0")
         running_peak = starting_equity
-        
+
         for point in equity_points:
             if point.equity > running_peak:
                 running_peak = point.equity
             drawdown = running_peak - point.equity
             drawdown_pct = (drawdown / running_peak * Decimal("100")) if running_peak > 0 else Decimal("0")
-            
+
             if drawdown > max_drawdown:
                 max_drawdown = drawdown
             if drawdown_pct > max_drawdown_pct:

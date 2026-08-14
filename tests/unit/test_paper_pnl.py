@@ -174,6 +174,37 @@ def test_equity_curve_and_drawdown() -> None:
     assert tracker.current_drawdown_pct == Decimal("500") / Decimal("11000") * Decimal("100")
 
 
+
+def test_current_equity_after_snapshot_without_engine() -> None:
+    """Test current_equity calculation after snapshot without engine.
+
+    Regression test for issue where equity was incorrectly calculated as 0
+    when record_snapshot was called without an engine parameter.
+    """
+    tracker = PaperPnLTracker(initial_capital=Decimal("10000"))
+
+    tracker.record_snapshot(
+        timestamp=datetime(2024, 1, 1, 1, tzinfo=timezone.utc),
+        sequence=1,
+        realized_pnl=Decimal("0"),
+        unrealized_pnl=Decimal("500"),
+    )
+
+    # Equity should be initial_capital + realized_pnl + unrealized_pnl
+    assert tracker.current_equity == Decimal("10500")
+
+    # Record another snapshot with additional PnL
+    tracker.record_snapshot(
+        timestamp=datetime(2024, 1, 1, 2, tzinfo=timezone.utc),
+        sequence=2,
+        realized_pnl=Decimal("200"),
+        unrealized_pnl=Decimal("800"),
+    )
+
+    # Equity should be initial_capital + total_pnl = 10000 + 200 + 800 = 11000
+    assert tracker.current_equity == Decimal("11000")
+
+
 def test_calculate_metrics_with_wins_and_losses() -> None:
     """Test aggregated metrics calculation."""
     tracker = PaperPnLTracker()
