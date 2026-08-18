@@ -1,6 +1,9 @@
 # Статус проекта Crypto Trading System
 
-## Текущий этап — 14.08.2026
+## Текущий этап — 18.08.2026
+
+Актуальный аудит и приоритеты разработки зафиксированы в
+[`DEVELOPMENT_PLAN_2026-08-18.md`](DEVELOPMENT_PLAN_2026-08-18.md).
 
 Проект находится на этапе backtest/walk-forward и закрытой независимой
 валидации `Breakout Retest v2`. Проспективная выборка BTCUSDT/ETHUSDT 1h
@@ -13,7 +16,9 @@
 - ✅ Реализованы sealed health gate и инкрементальное обслуживание holdout
 - ✅ Последний GitHub Actions run: unit, PostgreSQL 17 integration и Ruff — PASS
 - ✅ Unit-тесты: **382 passed**
-- ⛔ Paper trading заблокирован: Paper Exchange и restart recovery не реализованы
+- 🚧 Paper trading заблокирован: базовые Paper Exchange, runtime и restart recovery
+  реализованы, но не завершены composition root, единые миграции, reconciliation
+  и эксплуатационные safety gates
 - ⛔ Live trading заблокирован: execution, reconciliation и monitoring не реализованы
 
 ## Выполненные задачи

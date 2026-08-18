@@ -4,7 +4,10 @@ Automated cryptocurrency trading system with NautilusTrader integration.
 
 ## Current Status
 
-**Last updated: 2026-08-14**
+**Last updated: 2026-08-18**
+
+The current audited development plan is
+[`plan/DEVELOPMENT_PLAN_2026-08-18.md`](plan/DEVELOPMENT_PLAN_2026-08-18.md).
 
 The project is in the backtest/walk-forward and sealed independent-validation
 phase. The prospective `Breakout Retest v2` holdout covers BTCUSDT and ETHUSDT
@@ -14,7 +17,9 @@ phase. The prospective `Breakout Retest v2` holdout covers BTCUSDT and ETHUSDT
 - ✅ RAW → DDS, versioned indicators/regimes, backtest, Risk Engine and CI are implemented.
 - ✅ Unit tests: **382 passed**
 - ✅ Sealed holdout pipeline with incremental updates (`scripts/update_holdout_data.py`)
-- ⛔ Paper trading blocked: Paper Exchange and restart recovery not implemented.
+- 🚧 Paper trading blocked: core exchange/runtime/recovery components exist, but
+  application composition, unified migrations, reconciliation and operational
+  safety gates are not complete.
 - ⛔ Live trading blocked: execution, reconciliation and monitoring not implemented.
 
 Do not run strategy performance against the prospective holdout before its
