@@ -3,6 +3,22 @@
 Этот регламент закрывает этапы 1–5 из `postgresql_data_loading_plan.md` на одном
 контрольном диапазоне. Диапазон всегда трактуется как полуинтервал `[start, end)`.
 
+## 0. Воспроизводимый baseline
+
+Локальные проверки и CI выполняются на Python 3.12. Из чистого checkout до работы
+с БД необходимо установить тот же набор зависимостей и выполнить проверки:
+
+```bash
+python --version  # ожидается Python 3.12.x
+python -m pip install -e ".[dev]"
+python -m ruff check . --select F --ignore F401,F841
+python -m pytest tests/unit -q
+```
+
+PostgreSQL integration baseline использует PostgreSQL 17. Для изолированной
+тестовой БД команда приведена в разделе 5. Tracked backup-файлы и секреты не
+должны добавляться в репозиторий; секреты задаются только через локальный `.env`.
+
 ## 1. Безопасные условия запуска
 
 - PostgreSQL 17 доступен;
