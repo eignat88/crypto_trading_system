@@ -19,7 +19,8 @@
 - 🚧 Paper trading заблокирован: базовые Paper Exchange, runtime и restart recovery
   реализованы, но не завершены composition root, единые миграции, reconciliation
   и эксплуатационные safety gates
-- ⛔ Live trading заблокирован: execution, reconciliation и monitoring не реализованы
+- ⛔ Live trading заблокирован: paper execution реализован, но live order manager,
+  exchange reconciliation и эксплуатационный monitoring не реализованы
 
 ## Выполненные задачи
 
@@ -109,7 +110,7 @@
 ## Следующие шаги
 
 1. Поддерживать sealed holdout без расчёта performance до даты разблокировки
-2. Реализовать Paper Exchange и персистентное восстановление после рестарта
+2. Собрать существующие Paper Exchange и restart recovery в единый composition root
 3. Добавить reconciliation, monitoring и fail-closed emergency stop
 4. Завершить общий автоматический pipeline загрузка → DDS → indicators/regime
 5. Реализовать агрегации DDS → MART
@@ -117,8 +118,8 @@
 ## Запуск тестов
 
 ```bash
-# Установить зависимости
-pip install -e ".[dev]"
+# В Python 3.12 установить приложение и инструменты разработки
+python -m pip install -e ".[dev]"
 
 # Запустить тесты
 pytest tests/
@@ -127,8 +128,9 @@ pytest tests/
 pytest tests/ --cov=app --cov-report=html
 ```
 
-Текущая локальная проверка: **382 passed** (unit-тесты). Последний GitHub
-Actions run подтвердил unit-тесты, PostgreSQL 17 integration и Ruff.
+Воспроизводимый baseline использует Python 3.12 (см. `.python-version` и CI).
+Последний GitHub Actions run подтвердил **382 passed** для unit-тестов,
+PostgreSQL 17 integration и Ruff correctness.
 
 ## Статус PostgreSQL Data Loading (обновлено 14.08.2026)
 

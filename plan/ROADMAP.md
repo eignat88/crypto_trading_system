@@ -22,7 +22,7 @@
 | Backtest Engine | ✅ Готово | `app/backtest/`, `app/models/` |
 | Стратегия Trend DCA | ✅ Интегрирована | `app/strategies/trend_dca.py` |
 | Risk Engine | ✅ Готово | `app/risk/risk_engine.py` |
-| Paper Exchange | ⏳ Не начато | `app/exchange/` |
+| Paper Exchange | 🚧 Ядро реализовано, интеграция не завершена | `app/exchange/`, `app/execution/` |
 | Reconciliation | ⏳ Не начато | `app/execution/` |
 | Monitoring/alerts | ⏳ Не начато | `app/monitoring/` |
 | Unit тесты | ✅ Готово | `tests/unit/` |

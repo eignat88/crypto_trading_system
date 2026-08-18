@@ -20,14 +20,16 @@ phase. The prospective `Breakout Retest v2` holdout covers BTCUSDT and ETHUSDT
 - 🚧 Paper trading blocked: core exchange/runtime/recovery components exist, but
   application composition, unified migrations, reconciliation and operational
   safety gates are not complete.
-- ⛔ Live trading blocked: execution, reconciliation and monitoring not implemented.
+- ⛔ Live trading blocked: the paper execution path exists, but live order management,
+  exchange reconciliation, and operational monitoring are not implemented.
 
 Do not run strategy performance against the prospective holdout before its
 configured unlock time.
 
 ## Requirements
 
-- Python 3.12+
+- Python 3.12 (the project metadata permits newer compatible versions, while CI and
+  the reproducible local baseline use 3.12)
 - PostgreSQL 14+
 - NautilusTrader
 
@@ -47,8 +49,8 @@ python -m venv .venv
 # Upgrade pip
 python -m pip install --upgrade pip
 
-# Install dependencies
-pip install -e .
+# Install the application and test/tooling baseline
+python -m pip install -e ".[dev]"
 ```
 
 ### Linux/macOS
@@ -65,8 +67,8 @@ source .venv/bin/activate
 # Upgrade pip
 python -m pip install --upgrade pip
 
-# Install dependencies
-pip install -e .
+# Install the application and test/tooling baseline
+python -m pip install -e ".[dev]"
 ```
 
 ## Configuration
