@@ -7,6 +7,8 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.paper_pnl_snapshot_state import PaperPnLSnapshotState
+
 
 class PostgresPaperRepository:
     """
@@ -126,3 +128,44 @@ class PostgresPaperRepository:
 
         result = await self.session.execute(query)
         return [dict(row) for row in result.mappings().all()]
+
+    async def save_pnl_snapshot(self, snapshot: PaperPnLSnapshotState) -> None:
+        query = text(
+            """
+            INSERT INTO dds.paper_pnl_snapshot
+            (snapshot_time, sequence, equity, realized_pnl, unrealized_pnl,
+             total_pnl, fees_paid, slippage, cash_balance, position_value,
+             drawdown, drawdown_pct)
+            VALUES
+            (:snapshot_time, :sequence, :equity, :realized_pnl, :unrealized_pnl,
+             :total_pnl, :fees_paid, :slippage, :cash_balance, :position_value,
+             :drawdown, :drawdown_pct)
+            ON CONFLICT (snapshot_time, sequence) DO UPDATE SET
+                equity = EXCLUDED.equity,
+                realized_pnl = EXCLUDED.realized_pnl,
+                unrealized_pnl = EXCLUDED.unrealized_pnl,
+                total_pnl = EXCLUDED.total_pnl,
+                fees_paid = EXCLUDED.fees_paid,
+                slippage = EXCLUDED.slippage,
+                cash_balance = EXCLUDED.cash_balance,
+                position_value = EXCLUDED.position_value,
+                drawdown = EXCLUDED.drawdown,
+                drawdown_pct = EXCLUDED.drawdown_pct
+            """
+        )
+        await self.session.execute(query, snapshot.__dict__)
+        await self.session.commit()
+
+    async def load_pnl_snapshots(self) -> list[PaperPnLSnapshotState]:
+        result = await self.session.execute(
+            text(
+                """
+                SELECT snapshot_time, sequence, equity, realized_pnl,
+                       unrealized_pnl, total_pnl, fees_paid, slippage,
+                       cash_balance, position_value, drawdown, drawdown_pct
+                FROM dds.paper_pnl_snapshot
+                ORDER BY snapshot_time, sequence
+                """
+            )
+        )
+        return [PaperPnLSnapshotState(**dict(row)) for row in result.mappings().all()]

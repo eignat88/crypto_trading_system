@@ -143,6 +143,7 @@ class PaperMetricsCollector:
         fee: Decimal = Decimal("0"),
         slippage: Decimal = Decimal("0"),
         expected_price: Decimal | None = None,
+        update_tracker: bool = True,
     ) -> None:
         """Record a trade event.
 
@@ -169,9 +170,9 @@ class PaperMetricsCollector:
         self._trade_events.append(event)
 
         # Update tracker fees and slippage
-        if fee > 0:
+        if update_tracker and fee > 0:
             self.pnl_tracker._fees_paid += fee
-        if slippage > 0:
+        if update_tracker and slippage > 0:
             self.pnl_tracker._slippage_total += slippage
 
         logger.debug(
