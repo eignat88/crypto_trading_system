@@ -78,10 +78,10 @@ Bybit API
 | Клиент Bybit | `app/exchange/bybit_client.py` | Реализовано |
 | Коллектор свечей | `app/collectors/candle_collector.py` | Реализовано, `close_time` проверен unit-тестами |
 | Запуск исторической загрузки | `scripts/load_history.py` | Реализовано |
-| RAW-схемы и таблицы | `sql/001_create_raw.sql` | Реализовано |
-| DDS-схема и таблицы | `sql/002_create_dds.sql` | Реализовано |
-| MART-схема и таблицы | `sql/003_create_mart.sql` | Частично реализовано, загрузка DDS → MART отсутствует |
-| RAW → DDS | `sql/005_raw_to_dds_etl.sql` | Реализовано, идемпотентно |
+| RAW-схемы и таблицы | `database/migrations/001_create_raw.sql` | Реализовано |
+| DDS-схема и таблицы | `database/migrations/002_create_dds.sql` | Реализовано |
+| MART-схема и таблицы | `database/migrations/003_create_mart.sql` | Частично реализовано, загрузка DDS → MART отсутствует |
+| RAW → DDS | `database/migrations/005_raw_to_dds_etl.sql` | Реализовано, идемпотентно |
 | CLI RAW → DDS | `scripts/load_dds.py` | Реализовано |
 | Контроль качества | `dds.data_quality_event` | Реализовано для свечей |
 | Журнал RAW-загрузки | `raw_system.loading_journal` | Реализовано |
@@ -295,12 +295,7 @@ TRADING_MODE=paper
 ```powershell
 $psql = "C:\Program Files\PostgreSQL\17\bin\psql.exe"
 
-& $psql -U crypto_app -d crypto_trading -v ON_ERROR_STOP=1 -f .\sql\001_create_raw.sql
-& $psql -U crypto_app -d crypto_trading -v ON_ERROR_STOP=1 -f .\sql\002_create_dds.sql
-& $psql -U crypto_app -d crypto_trading -v ON_ERROR_STOP=1 -f .\sql\003_create_mart.sql
-& $psql -U crypto_app -d crypto_trading -v ON_ERROR_STOP=1 -f .\sql\004_add_api_request_id.sql
-& $psql -U crypto_app -d crypto_trading -v ON_ERROR_STOP=1 -f .\sql\005_raw_to_dds_etl.sql
-& $psql -U crypto_app -d crypto_trading -v ON_ERROR_STOP=1 -f .\sql\006_create_risk_state.sql
+python .\scripts\migrate_database.py
 ```
 
 `ON_ERROR_STOP=1` обязателен: процесс должен остановиться на первой SQL-ошибке.
@@ -780,7 +775,7 @@ ORDER BY symbol, open_time;
 ## 13. Рекомендуемый порядок ближайших работ
 
 1. Проверить новый PostgreSQL 17 integration job в GitHub Actions.
-2. На целевой БД дважды применить миграции `001–006` через `apply_migrations.py`.
+2. На целевой БД дважды применить миграции `001–006` через `migrate_database.py`.
 3. Выполнить пилот `BTCUSDT / 1h / 7 дней` по `postgresql_pilot_runbook.md`.
 4. Проверить RAW автоматической командой `verify_market_data.py --layer raw`.
 5. Выполнить `RAW → DDS`, повторить запуск и проверить идемпотентность.

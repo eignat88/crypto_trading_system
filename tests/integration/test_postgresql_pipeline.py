@@ -4,18 +4,18 @@ import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from pathlib import Path
 
 import psycopg
 import pytest
 from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from sqlalchemy.engine import URL
+
+from scripts.migrate_database import apply_migrations
 
 pytestmark = pytest.mark.integration
 
 DATABASE_URL = os.getenv("TEST_DATABASE_URL")
-PROJECT_ROOT = Path(__file__).parents[2]
-MIGRATIONS = sorted((PROJECT_ROOT / "sql").glob("[0-9][0-9][0-9]_*.sql"))
 
 
 def connect(conninfo=DATABASE_URL, *, autocommit=False):
@@ -24,18 +24,22 @@ def connect(conninfo=DATABASE_URL, *, autocommit=False):
     return psycopg.connect(conninfo, autocommit=autocommit)
 
 
-def apply_all_migrations(connection) -> None:
-    for migration in MIGRATIONS:
-        with connection.cursor() as cursor:
-            cursor.execute(migration.read_text(encoding="utf-8-sig"))
-        connection.commit()
-
-
 @pytest.fixture(scope="module", autouse=True)
 def isolated_database():
     """Run destructive migration checks without modifying the shared test DB."""
+    if not DATABASE_URL:
+        pytest.skip("TEST_DATABASE_URL is not configured")
     database_name = f"crypto_pipeline_{uuid.uuid4().hex}"
-    database_url = make_conninfo(DATABASE_URL, dbname=database_name)
+    connection_params = conninfo_to_dict(DATABASE_URL)
+    database_conninfo = make_conninfo(DATABASE_URL, dbname=database_name)
+    database_sqlalchemy_url = URL.create(
+        "postgresql+psycopg",
+        username=connection_params.get("user"),
+        password=connection_params.get("password"),
+        host=connection_params.get("host"),
+        port=int(connection_params["port"]) if connection_params.get("port") else None,
+        database=database_name,
+    )
 
     with connect(autocommit=True) as admin_connection:
         with admin_connection.cursor() as cursor:
@@ -46,14 +50,14 @@ def isolated_database():
             )
 
         try:
-            with connect(database_url) as connection:
-                apply_all_migrations(connection)
-                apply_all_migrations(connection)
+            apply_migrations(database_sqlalchemy_url)
+            apply_migrations(database_sqlalchemy_url)
+            with connect(database_conninfo) as connection:
                 yield connection
         finally:
             # conninfo_to_dict validates that teardown targets only the database
             # generated above, never the shared TEST_DATABASE_URL database.
-            assert conninfo_to_dict(database_url)["dbname"] == database_name
+            assert conninfo_to_dict(database_conninfo)["dbname"] == database_name
             with admin_connection.cursor() as cursor:
                 cursor.execute(
                     sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
@@ -101,7 +105,13 @@ def test_migrations_create_required_database_contract(isolated_database) -> None
             SELECT to_regclass('raw_market.candles'),
                    to_regclass('dds.candle'),
                    to_regclass('dds.data_quality_event'),
-                   to_regprocedure('dds.load_raw_candles(text,text,text,timestamptz)')
+                   to_regprocedure('dds.load_raw_candles(text,text,text,timestamptz)'),
+                   to_regclass('dds.paper_fills'),
+                   to_regclass('dds.paper_positions'),
+                   to_regclass('dds.paper_balance'),
+                   to_regclass('dds.paper_checkpoint'),
+                   to_regclass('dds.paper_pnl_snapshots'),
+                   to_regclass('mart.daily_performance')
             """
         )
         assert all(cursor.fetchone())

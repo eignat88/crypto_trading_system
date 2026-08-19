@@ -1,6 +1,6 @@
 from pathlib import Path
 
-SQL = (Path(__file__).parents[2] / "sql" / "005_raw_to_dds_etl.sql").read_text()
+SQL = (Path(__file__).parents[2] / "database" / "migrations" / "005_raw_to_dds_etl.sql").read_text()
 
 
 def test_etl_seeds_supported_instruments_and_is_idempotent() -> None:

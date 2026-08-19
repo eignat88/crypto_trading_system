@@ -2,18 +2,17 @@ import asyncio
 import os
 from datetime import UTC, datetime
 from decimal import Decimal
-from pathlib import Path
 
 import asyncpg
 import pytest
 
 from app.database.paper_state_repository_pg import PaperStateRepositoryPostgres
 from app.models.paper_pnl_snapshot_state import PaperPnLSnapshotState
+from scripts.migrate_database import apply_migrations
 
 pytestmark = pytest.mark.integration
 
 DATABASE_URL = os.getenv("TEST_DATABASE_URL")
-MIGRATION = Path(__file__).parents[2] / "sql" / "022_create_paper_pnl_snapshot.sql"
 
 
 def snapshot() -> PaperPnLSnapshotState:
@@ -40,8 +39,10 @@ async def connect() -> asyncpg.Connection:
 
 
 async def prepare_database() -> asyncpg.Connection:
+    if not DATABASE_URL:
+        pytest.skip("TEST_DATABASE_URL is not configured")
+    apply_migrations(DATABASE_URL)
     connection = await connect()
-    await connection.execute(MIGRATION.read_text(encoding="utf-8"))
     await connection.execute("TRUNCATE dds.paper_pnl_snapshots")
     return connection
 

@@ -30,9 +30,9 @@ fail-closed paper runtime.
 ### Реализовано частично или не интегрировано
 
 1. `app/main.py` проверяет БД, но не собирает и не запускает paper runtime.
-2. Есть два набора paper-миграций (`app/database/migrations/`,
-   `database/migrations/`), но основной migration runner применяет только
-   `sql/001`–`sql/006`; единый порядок и журнал миграций отсутствуют.
+2. Миграции унифицированы в `database/migrations/`; runner
+   `scripts/migrate_database.py` применяет их по порядку и ведёт checksum-журнал
+   `public.schema_migrations`.
 3. Индикаторный batch pipeline существует, но не подключён к основному процессу
    загрузки данных как единая идемпотентная операция.
 4. MART-схема существует, однако production-ready DDS → MART orchestration и

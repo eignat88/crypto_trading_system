@@ -119,8 +119,8 @@ Add-FileContent "scripts\reproduce_breakout_retest_v1.py"
 # Current SQL
 # --------------------------------------------------------------------
 
-Add-FileContent "sql\008_create_backtest_audit.sql"
-Add-FileContent "sql\009_version_derived_backtest_dataset.sql"
+Add-FileContent "database\migrations\008_create_backtest_audit.sql"
+Add-FileContent "database\migrations\009_version_derived_backtest_dataset.sql"
 
 
 # --------------------------------------------------------------------
