@@ -9,6 +9,7 @@ import pytest
 
 from app.exchange.paper_execution_engine import PaperExecutionEngine
 from app.models.paper_fill_state import PaperFillState
+from app.models.paper_order_state import PaperOrderState
 from app.models.paper_position_state import PaperPositionState
 from app.reporting.paper_pnl import (
     PaperPnLTracker,
@@ -27,6 +28,56 @@ class MockPriceProvider:
 
     def get_price(self, symbol: str) -> Decimal | None:
         return self._prices.get(symbol)
+
+
+def test_realized_pnl_uses_order_side_for_positive_fill_quantities() -> None:
+    """A partial SELL realizes PnL while preserving positive fill quantities."""
+    timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    orders = [
+        PaperOrderState("o1", "BTCUSDT", "BUY", Decimal("2"), "FILLED", timestamp),
+        PaperOrderState("o2", "BTCUSDT", "SELL", Decimal("0.5"), "FILLED", timestamp),
+    ]
+    fills = [
+        PaperFillState("f1", "o1", "BTCUSDT", Decimal("2"), Decimal("100"), timestamp),
+        PaperFillState("f2", "o2", "BTCUSDT", Decimal("0.5"), Decimal("130"), timestamp),
+    ]
+    positions = {
+        "BTCUSDT": PaperPositionState("BTCUSDT", Decimal("1.5"), Decimal("100"))
+    }
+    tracker = PaperPnLTracker()
+
+    realized = tracker.calculate_realized_pnl(fills, orders, positions)
+
+    assert realized == Decimal("15")
+    assert tracker.calculate_metrics().total_realized_pnl == Decimal("15")
+
+
+def test_realized_pnl_recalculation_is_idempotent() -> None:
+    timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    orders = [
+        PaperOrderState("o1", "BTCUSDT", "BUY", Decimal("2"), "FILLED", timestamp),
+        PaperOrderState("o2", "BTCUSDT", "SELL", Decimal("0.5"), "FILLED", timestamp),
+    ]
+    fills = [
+        PaperFillState("f1", "o1", "BTCUSDT", Decimal("2"), Decimal("100"), timestamp),
+        PaperFillState(
+            "f2", "o2", "BTCUSDT", Decimal("0.5"), Decimal("130"), timestamp
+        ),
+    ]
+    tracker = PaperPnLTracker()
+
+    first = tracker.calculate_realized_pnl(fills, orders, {})
+    first_metrics = tracker.calculate_metrics()
+
+    second = tracker.calculate_realized_pnl(fills, orders, {})
+    second_metrics = tracker.calculate_metrics()
+
+    assert first == Decimal("15")
+    assert second == Decimal("15")
+    assert first_metrics.total_realized_pnl == Decimal("15")
+    assert second_metrics.total_realized_pnl == Decimal("15")
+    assert first_metrics.total_trades == 1
+    assert second_metrics.total_trades == 1
 
 
 def test_pnl_tracker_initialization() -> None:
