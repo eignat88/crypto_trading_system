@@ -6,6 +6,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
+from collections.abc import Sequence
 from typing import Protocol
 
 from app.exchange.paper_execution_engine import PaperExecutionEngine
@@ -13,6 +14,7 @@ from app.models.candle import Candle
 from app.models.paper_fill_state import PaperFillState
 from app.models.paper_order_state import PaperOrderState
 from app.models.paper_position_state import PaperPositionState
+from app.models.paper_pnl_snapshot_state import PaperPnLSnapshotState
 
 
 logger = logging.getLogger(__name__)
@@ -396,6 +398,53 @@ class PaperPnLTracker:
         ))
 
         return record
+
+    def snapshot_state(self, record: PnLRecord | None = None) -> PaperPnLSnapshotState:
+        """Convert a successfully recorded snapshot to its persistence model."""
+        if not self._pnl_records or not self._equity_curve:
+            raise ValueError("No PnL snapshot has been recorded")
+        record = record or self._pnl_records[-1]
+        try:
+            index = next(i for i in range(len(self._pnl_records) - 1, -1, -1)
+                         if self._pnl_records[i] is record)
+        except StopIteration as exc:
+            raise ValueError("Record does not belong to this tracker") from exc
+        point = self._equity_curve[index]
+        return PaperPnLSnapshotState(
+            snapshot_time=record.timestamp, sequence=point.sequence,
+            equity=record.equity, realized_pnl=record.realized_pnl,
+            unrealized_pnl=record.unrealized_pnl, total_pnl=record.total_pnl,
+            fees_paid=record.fees_paid, slippage=record.slippage,
+            cash_balance=record.cash_balance, position_value=record.position_value,
+            drawdown=point.drawdown, drawdown_pct=point.drawdown_pct,
+        )
+
+    def restore_snapshots(self, snapshots: Sequence[PaperPnLSnapshotState]) -> None:
+        """Replace reporting state with durable snapshots without duplicating data."""
+        if not snapshots:
+            return
+        ordered = sorted(snapshots, key=lambda item: (item.snapshot_time, item.sequence))
+        unique = {(item.snapshot_time, item.sequence): item for item in ordered}
+        ordered = sorted(unique.values(), key=lambda item: (item.snapshot_time, item.sequence))
+        self._pnl_records = [
+            PnLRecord(
+                timestamp=item.snapshot_time, equity=item.equity,
+                realized_pnl=item.realized_pnl, unrealized_pnl=item.unrealized_pnl,
+                total_pnl=item.total_pnl, fees_paid=item.fees_paid,
+                slippage=item.slippage, cash_balance=item.cash_balance,
+                position_value=item.position_value,
+            ) for item in ordered
+        ]
+        self._equity_curve = [
+            EquityPoint(
+                timestamp=item.snapshot_time, sequence=item.sequence,
+                equity=item.equity, drawdown=item.drawdown,
+                drawdown_pct=item.drawdown_pct,
+            ) for item in ordered
+        ]
+        self._fees_paid = ordered[-1].fees_paid
+        self._slippage_total = ordered[-1].slippage
+        self._peak_equity = max(point.equity + point.drawdown for point in self._equity_curve)
 
     def calculate_metrics(self) -> TradingMetrics:
         """Calculate aggregated trading metrics.
