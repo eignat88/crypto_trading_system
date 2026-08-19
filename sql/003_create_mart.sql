@@ -146,6 +146,9 @@ CREATE INDEX IF NOT EXISTS idx_mart_asset_performance_symbol
 CREATE INDEX IF NOT EXISTS idx_mart_drawdown_history_time
     ON mart.drawdown_history (timestamp DESC);
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mart_drawdown_history_timestamp
+    ON mart.drawdown_history (timestamp);
+
 CREATE INDEX IF NOT EXISTS idx_mart_monthly_returns_year
     ON mart.monthly_returns (year_month DESC);
 
