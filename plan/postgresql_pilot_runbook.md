@@ -31,12 +31,13 @@ PostgreSQL integration baseline использует PostgreSQL 17. Для из�
 ## 2. Применение миграций
 
 ```powershell
-python .\scripts\apply_migrations.py
-python .\scripts\apply_migrations.py
+python .\scripts\migrate_database.py
+python .\scripts\migrate_database.py
 ```
 
-Оба запуска должны завершиться строкой `migration_status=success`. Второй запуск
-подтверждает повторяемость DDL без удаления данных.
+Первый запуск применяет pending-файлы и записывает их SHA-256 в
+`public.schema_migrations`. Второй запуск должен сообщить, что pending migrations
+нет; изменение уже применённого файла обязано завершаться безопасным отказом.
 
 ## 3. Пилот API → RAW
 

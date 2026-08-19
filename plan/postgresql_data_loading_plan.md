@@ -1,9 +1,9 @@
 # План загрузки данных в PostgreSQL
 
-**Проект:** Crypto Trading System  
-**Дата:** 31.07.2026  
-**Статус документа:** план реализации и проверки  
-**Контур первой версии:** Bybit Spot, `BTCUSDT` и `ETHUSDT`  
+**Проект:** Crypto Trading System
+**Обновлено:** 19.08.2026
+**Статус документа:** кодовый foundation готов; требуется пилот на целевой БД
+**Контур первой версии:** Bybit Spot, `BTCUSDT` и `ETHUSDT`
 
 ---
 
@@ -80,15 +80,16 @@ Bybit API
 | Запуск исторической загрузки | `scripts/load_history.py` | Реализовано |
 | RAW-схемы и таблицы | `database/migrations/001_create_raw.sql` | Реализовано |
 | DDS-схема и таблицы | `database/migrations/002_create_dds.sql` | Реализовано |
-| MART-схема и таблицы | `database/migrations/003_create_mart.sql` | Частично реализовано, загрузка DDS → MART отсутствует |
+| MART-схема и таблицы | `database/migrations/003_create_mart.sql` | Реализовано |
 | RAW → DDS | `database/migrations/005_raw_to_dds_etl.sql` | Реализовано, идемпотентно |
 | CLI RAW → DDS | `scripts/load_dds.py` | Реализовано |
 | Контроль качества | `dds.data_quality_event` | Реализовано для свечей |
 | Журнал RAW-загрузки | `raw_system.loading_journal` | Реализовано |
 | Checkpoint DDS | `dds.etl_checkpoint` | Реализовано |
 | Журнал DDS-запусков | `dds.etl_run` | Реализовано |
-| Автозапуск индикаторов после DDS | — | Не реализовано |
-| DDS → MART | — | Не реализовано |
+| Indicators/regime после DDS | `app/pipeline/market_pipeline.py` | Библиотечная композиция реализована; scheduler не подключён |
+| DDS → MART | `app/reporting/mart_etl.py`, `scripts/load_mart.py` | Идемпотентный ETL реализован и протестирован |
+| Миграции | `scripts/migrate_database.py` | Единый checksum-protected runner реализован |
 
 ### Повторная проверка реализации после PR №15
 
@@ -99,15 +100,15 @@ Bybit API
 | RAW, API response и checkpoint в одной транзакции | `session.begin()` охватывает три операции | Выполнено в коде |
 | Идемпотентный RAW → DDS | `dds.load_raw_candles()`, checkpoint `FOR UPDATE`, `ON CONFLICT DO NOTHING` | Выполнено в SQL |
 | Карантин и журнал DDS | `dds.data_quality_event`, `dds.etl_run` | Выполнено в SQL |
-| Чистое и повторное применение миграций | `scripts/apply_migrations.py`, PostgreSQL integration test | Подготовлено, CI job создан в `.github/workflows/ci.yml` |
-| Валидная, отклонённая и отложенная свеча | `tests/integration/test_postgresql_pipeline.py` | Подготовлено, CI job ожидает запуска в GitHub Actions |
+| Чистое и повторное применение миграций | `scripts/migrate_database.py`, PostgreSQL integration test | Выполнено в PostgreSQL 17 CI |
+| Валидная, отклонённая и отложенная свеча | `tests/integration/test_postgresql_pipeline.py` | Выполнено в PostgreSQL 17 CI |
 | Автоматическая сверка диапазона RAW/DDS | `scripts/verify_market_data.py` | Подготовлено, требуется запуск на целевой БД |
 | Регламент пилота | `plan/postgresql_pilot_runbook.md` | Подготовлено |
 
-**Промежуточный вывод:** кодовые блокеры исторической загрузки устранены. Все 95 unit-тестов
-проходят локально. Интеграционные тесты с PostgreSQL 17 подготовлены и включены в CI workflow.
-Массовая загрузка всё ещё запрещена до успешного прохождения PostgreSQL 17 integration в CI
-и пилота `BTCUSDT 1h` на целевой БД.
+**Промежуточный вывод:** кодовые блокеры исторической загрузки устранены,
+PostgreSQL 17 integration включён в CI и единая цепочка миграций защищена
+checksums. Массовая загрузка всё ещё запрещена до пилота `BTCUSDT 1h` на целевой
+БД; число тестов берётся из текущего CI, а не фиксируется в документе.
 
 ### Исправление блокера `close_time`
 
@@ -238,7 +239,8 @@ exchange_name + symbol + interval_code
 
 MART не должен заполняться напрямую из RAW. Источником служат только проверенные данные DDS.
 
-Загрузка `DDS → MART` выполняется после завершения:
+Реализованный `scripts/load_mart.py` запускает идемпотентную загрузку `DDS → MART`.
+В production она должна выполняться после завершения:
 
 1. исторической загрузки свечей;
 2. проверки целостности DDS;
@@ -752,7 +754,7 @@ ORDER BY symbol, open_time;
 Загрузка исторических данных считается готовой, если одновременно выполнены условия:
 
 - [x] исправлено заполнение `close_time` для `5m`, `15m`, `1h`, `4h`, `1d`;
-- [x] unit-тесты проходят локально (95 passed);
+- [x] unit suite проходит в воспроизводимом Python 3.12 baseline;
 - [ ] миграции применяются на чистой PostgreSQL 17 без ошибок;
 - [ ] пилот `BTCUSDT 1h` успешно проходит `API → RAW → DDS`;
 - [ ] повторный запуск не создаёт дублей;
@@ -763,7 +765,7 @@ ORDER BY symbol, open_time;
 - [ ] количества RAW и DDS сверены;
 - [x] интеграционные тесты с PostgreSQL подготовлены;
 - [x] интеграционные тесты включены в CI job `.github/workflows/ci.yml`;
-- [ ] CI job `PostgreSQL 17 integration` успешно пройден в GitHub Actions;
+- [x] CI job `PostgreSQL 17 integration` успешно пройден в GitHub Actions;
 - [ ] ошибки API и БД журналируются;
 - [ ] все timestamps хранятся в UTC;
 - [ ] торговые модули не используют неполные или невалидные данные;
@@ -774,16 +776,17 @@ ORDER BY symbol, open_time;
 
 ## 13. Рекомендуемый порядок ближайших работ
 
-1. Проверить новый PostgreSQL 17 integration job в GitHub Actions.
-2. На целевой БД дважды применить миграции `001–006` через `migrate_database.py`.
-3. Выполнить пилот `BTCUSDT / 1h / 7 дней` по `postgresql_pilot_runbook.md`.
-4. Проверить RAW автоматической командой `verify_market_data.py --layer raw`.
-5. Выполнить `RAW → DDS`, повторить запуск и проверить идемпотентность.
-6. Выполнить итоговую автоматическую сверку `verify_market_data.py --layer all`.
-7. Загрузить 3 года истории по потокам от `1d` к `5m`.
-8. Выполнить итоговую проверку полноты и качества.
-9. Подключить автоматический расчёт индикаторов после успешного DDS ETL.
-10. Только после этого использовать данные в walk-forward и backtest.
+1. На целевой БД дважды запустить единый `scripts/migrate_database.py`.
+2. Выполнить пилот `BTCUSDT / 1h / 7 дней` по `postgresql_pilot_runbook.md`.
+3. Проверить RAW автоматической командой `verify_market_data.py --layer raw`.
+4. Выполнить `RAW → DDS`, повторить запуск и проверить идемпотентность.
+5. Выполнить итоговую автоматическую сверку `verify_market_data.py --layer all`.
+6. Проверить indicators/regime через готовый `MarketDataPipeline`.
+7. Проверить готовый DDS → MART ETL и его повторный запуск.
+8. Загрузить 3 года истории по потокам от `1d` к `5m`.
+9. Выполнить итоговую проверку полноты и качества.
+10. Подключить pipeline к управляемому расписанию; только после этого использовать
+    набор в walk-forward и paper runtime.
 
 ---
 
@@ -803,27 +806,27 @@ ORDER BY symbol, open_time;
 
 ---
 
-## 15. Текущий статус (обновлено 31.07.2026)
+## 15. Текущий статус (обновлено 19.08.2026)
 
 ### Выполнено
 
 - ✅ Кодовые блокеры `close_time` устранены для всех 5 интервалов (`5m`, `15m`, `1h`, `4h`, `1d`)
-- ✅ Unit-тесты проходят: **95 passed** в локальной среде
+- ✅ Unit suite и PostgreSQL 17 integration контролируются CI
 - ✅ RAW → DDS ETL реализован и протестирован на unit-уровне
-- ✅ Миграции SQL (`001–006`) подготовлены
+- ✅ Все миграции RAW/DDS/MART/paper собраны в `database/migrations/`
+- ✅ `scripts/migrate_database.py` ведёт checksum-журнал `public.schema_migrations`
 - ✅ Интеграционные тесты PostgreSQL написаны в `tests/integration/test_postgresql_pipeline.py`
 - ✅ CI workflow `.github/workflows/ci.yml` включает job `PostgreSQL 17 integration`
 
 ### Требуется выполнить
 
-- 🔲 Запустить CI job `PostgreSQL 17 integration` в GitHub Actions
 - 🔲 Выполнить пилотную загрузку `BTCUSDT 1h` на целевой БД по `postgresql_pilot_runbook.md`
 - 🔲 Проверить идемпотентность повторного запуска RAW → DDS
 - 🔲 Выполнить автоматическую сверку `verify_market_data.py --layer all`
 - 🔲 Загрузить 3 года истории для BTCUSDT и ETHUSDT
-- 🔲 Подключить автоматический расчёт индикаторов после DDS ETL
+- 🔲 Подключить готовые market и MART pipelines к операционному расписанию
 
 ### Блокеры
 
-- ⛔ Массовая загрузка запрещена до прохождения CI integration tests
+- ⛔ Массовая загрузка запрещена до успешного пилота на целевой БД
 - ⛔ Торговые модули не должны использовать данные до завершения пилота и проверки качества

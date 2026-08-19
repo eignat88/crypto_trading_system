@@ -1,298 +1,81 @@
 # План развития Crypto Trading System
 
-Дата анализа: 31.07.2026  
-Репозиторий: `eignat88/crypto_trading_system`  
-Базовая ветка: `main`
-Ветка реализации: `agent/integrate-backtest-core`
-Последний локально проверенный commit: `0a8478f`
+> Документ синхронизирован 19.08.2026. Детальный оперативный план находится в
+> [`DEVELOPMENT_PLAN_2026-08-19.md`](DEVELOPMENT_PLAN_2026-08-19.md), а компактная
+> последовательность milestones — в [`ROADMAP.md`](ROADMAP.md).
 
----
+## Цель текущего цикла
 
-## 1. Текущий статус (31.07.2026)
+Собрать реализованные data, strategy, risk, paper execution, persistence,
+monitoring и reporting компоненты в единый воспроизводимый **paper application**.
+До прохождения paper acceptance gates live trading остаётся запрещённым.
 
-Первый спринт интеграции ядра реализован в отдельной ветке и подготовлен к проверке через draft PR.
-**Текущий статус: «интегрированное ядро backtest, требуется ревью PR и проверка CI; к walk-forward можно переходить после объединения изменений»**.
+## Что уже построено
 
-### Что ИСПРАВЛЕНО (по сравнению с предыдущим анализом):
+1. **Данные:** RAW/DDS, проверки качества, checkpoints, versioned derived data,
+   инкрементальные indicators/regime и идемпотентный DDS → MART ETL.
+2. **Исследование:** backtest с N → N+1 execution, costs, portfolio, audit trail и
+   walk-forward foundation.
+3. **Стратегии и risk:** Trend DCA, Breakout Retest, frozen v2 и Risk Engine.
+4. **Paper foundation:** market feed, fill simulation, execution runtime,
+   PostgreSQL persistence/recovery, metrics, PnL и persistent PnL snapshots.
+5. **Эксплуатационная база:** Python 3.12 CI, PostgreSQL 17 integration и единый
+   checksum-protected migration runner.
+6. **Independent validation:** sealed holdout pipeline с запретом performance до
+   `2027-02-06T00:00:00Z` и выполнения sample requirements.
 
-| Дефект | Статус | Коммит |
-|--------|--------|--------|
-| P0. Пагинация свечей Bybit | ✅ Исправлено | `680491f`, `50f7da1` |
-| P0. Подпись V5 приватных запросов | ✅ Исправлено | `9748dfd` |
-| P0. Повторная отправка ордеров | ✅ Исправлено | `9748dfd` |
-| P0. Ошибочная стоимость портфеля | ✅ Исправлено | `1929b04` |
-| P0. Отсутствует RAW → DDS | ✅ Исправлено | `6de9b86` |
-| P0. Risk Engine не интегрирован с Backtest | ✅ Исправлено | `0a8478f` |
-| P0. Trend DCA не интегрирована с Backtest | ✅ Исправлено | `0a8478f` |
-| P1. DCA расходует уровень до фактического fill | ✅ Исправлено | `0a8478f` |
-| P1. Лимит позиции проверяется только для добавки | ✅ Исправлено | `0a8478f` |
-| P1. Нет единых моделей Signal/Order/Fill/RiskDecision | ✅ Исправлено | `0a8478f` |
+Наличие компонентов не равно готовности к пилоту: пока нет application lifecycle,
+полного reconciliation, alert routing и доказанного restart E2E.
 
-### Что ОСТАЛОСЬ нерешённым:
+## Приоритеты
 
-| Дефект | Статус | Приоритет |
-|--------|--------|-----------|
-| Состояние не сохраняется | ❌ Не исправлено | P1 |
-| Полный backtest на исторических BTCUSDT/ETHUSDT не выполнен | ❌ Не выполнено | P0 |
-| Walk-forward движок и бенчмарки отсутствуют | ❌ Не реализовано | P0 |
-| Покрытие тестами ниже целевых 80% | ⚠️ 72% локально | P1 |
-| Секреты в истории репозитория не проверены отдельным сканером | ❌ Не проверено | P1 |
+### P0. Paper composition и lifecycle
 
----
+- composition root/CLI;
+- preflight, schema compatibility, restore, warmup;
+- closed-candle processing через Strategy → Risk → Execution;
+- durable checkpoints и graceful shutdown;
+- fail-closed отказ при live mode и критической зависимости.
 
-## 2. Фактический статус компонентов
+### P0. Idempotency и recovery
 
-| Компонент | Статус | Детали |
-|-----------|--------|--------|
-| Структура Python-проекта | ✅ Готово | pyproject.toml, .env, конфигурация |
-| PostgreSQL (RAW/DDS/MART) | ✅ Готово | 21 таблица, все миграции выполнены |
-| Bybit клиент (публичный) | ✅ Готово | Пагинация, checkpoint, retry |
-| Bybit клиент (приватный) | ✅ Готово | V5 подпись, безопасный retry |
-| Загрузка свечей | ✅ Готово | Идемпотентно, без дублей |
-| RAW → DDS ETL | ✅ Готово | `005_raw_to_dds_etl.sql` — идемпотентный |
-| Индикаторы | ✅ Готово | EMA, RSI, ATR, волатильность, объём, цена |
-| IndicatorCollector | ✅ Готово | Расчёт и сохранение в DDS |
-| Контроль качества | ✅ Готово | DataQualityChecker, 7 проверок OHLCV |
-| Market Regime | ✅ Готово | TREND_UP/DOWN, RANGE, HIGH_VOLATILITY |
-| Типизированные торговые модели | ✅ Реализовано | `Signal`, `RiskDecision`, `Order`, `Fill`, `Position` |
-| Backtest Engine | ✅ Интегрировано | Signal → RiskDecision → Order → Fill → Portfolio |
-| Trend DCA | ✅ Интегрировано | Подключается к Backtest Engine, уровень фиксируется после fill |
-| Risk Engine | ✅ Интегрировано | Проверяет каждый вход и итоговый размер spot-позиции |
-| Trailing stop | ✅ Реализовано | Использует high-water mark после входа |
-| Spot-only ограничения | ✅ Реализовано | Новые short-входы запрещены; выходы разрешены при emergency stop |
-| Paper Exchange | ❌ Не реализовано | — |
-| Reconciliation | ❌ Не реализовано | — |
-| Мониторинг | ❌ Не реализовано | — |
-| CI/CD | ✅ Реализовано | GitHub Actions добавлен ранее; требуется проверка нового PR |
-| Unit и сквозные тесты | ✅ 88 тестов | Локально все проходят |
-| Покрытие тестами | ⚠️ 72% | Целевой порог 80% пока не достигнут |
+- restart E2E на границах signal/order/fill/PnL/checkpoint;
+- deterministic replay;
+- correlation identifiers и запрет duplicate orders.
 
----
+### P1. Observability и reconciliation
 
-## 3. ПЛАН: Что делать дальше
+- heartbeat, lag/latency/checkpoint/risk/PnL metrics;
+- alerts и emergency stop;
+- сверка orders/fills/positions/equity/last event;
+- runbook и fault-injection.
 
-### Приоритет 1: Интеграция ядра — реализовано, требуется проверка PR
+### P1. Reporting и pilot
 
-Цель: `Candle → Indicators → Regime → Strategy Signal → Risk Engine → Fill → Portfolio`
+- production scheduling для готовых market и MART pipelines;
+- immutable daily report;
+- фиксированная pilot configuration;
+- 7-day burn-in и минимум 90 дней/100 закрытых сделок.
 
-**Задача 1.1**: Интегрировать Risk Engine в Backtest Engine — ✅ реализовано
-- Каждый сигнал стратегии проходит через Risk Engine
-- Risk Engine блокирует сделки при превышении лимитов
-- Сохранять risk events в журнал
-- Файлы: `app/backtest/backtest_engine.py`, `app/risk/risk_engine.py`
+## Решения до старта paper pilot
 
-**Задача 1.2**: Интегрировать Trend DCA с Backtest Engine — ✅ реализовано
-- Стратегия возвращает `Signal`, Backtest Engine преобразует в `Order`
-- DCA-уровни корректно увеличивают позицию (не перезаписывают)
-- Stop-loss и take-profit передаются в позицию
-- Файлы: `app/strategies/trend_dca.py`, `app/backtest/backtest_engine.py`
+- одна pilot strategy и её immutable version;
+- capital/exposure/loss/drawdown limits;
+- candle-lag, recovery-time и alert-delivery SLO;
+- hosting, PostgreSQL backup/restore и log retention;
+- владелец emergency stop и процедура его снятия.
 
-**Задача 1.3**: Исправить trailing stop — ✅ реализовано
-- Trailing stop считает от максимума цены после входа (high-water mark)
-- Активация при достижении минимальной прибыли
-- Файл: `app/strategies/trend_dca.py`
+## Definition of Done
 
-**Задача 1.4**: Зафиксировать spot-only поведение — ✅ реализовано
-- Новые short-входы запрещены
-- Закрывающий ордер разрешён даже при emergency stop, чтобы система могла безопасно выйти из позиции
-- Файлы: `app/backtest/portfolio.py`, `app/backtest/backtest_engine.py`, `app/strategies/trend_dca.py`
+Изменение считается готовым, если оно типизировано, покрыто unit/integration
+проверками на соответствующих границах, идемпотентно после restart, не раскрывает
+секреты, оставляет audit trail, обновляет документацию и не ослабляет live/holdout
+gates.
 
-**Задача 1.5**: Добавить типизированные модели — ✅ реализовано
-- `Signal`, `RiskDecision`, `Order`, `Fill`, `Position`
-- Единый формат данных между модулями
-- Файл: `app/models/` (новый каталог)
+## Запрещённые сокращения пути
 
-**Критерий готовности:**
-- ✅ equity = cash + market value для spot
-- ✅ каждый торговый вход имеет решение Risk Engine
-- ✅ DCA корректно увеличивает позицию и подтверждает уровень только после fill
-- ✅ итоговая позиция ограничивается Risk Engine, а не только размер добавки
-- ✅ trailing stop работает от high-water mark
-- ✅ 88 тестов, Ruff и mypy для изменённого ядра проходят локально
-- ⏳ требуется прохождение CI и ревью draft PR
-
----
-
-### Приоритет 2: CI/CD и чистота репозитория (1-2 дня)
-
-**Задача 2.1**: GitHub Actions — ✅ базовый workflow реализован
-```yaml
-# .github/workflows/ci.yml
-- ruff check
-- mypy
-- pytest --cov=app --cov-report=xml
-- целевое coverage >= 80%
-```
-
-**Задача 2.2**: Очистка репозитория
-- ✅ диагностические отчёты удалены из отслеживаемых файлов
-- ✅ каталог добавлен в `.gitignore`
-- Проверить секреты в истории
-
-**Задача 2.3**: Обновить документацию
-- ✅ STATUS.md — обновлён в первом спринте
-- ✅ ROADMAP.md — обновлён в первом спринте
-- README.md — инструкции по запуску
-
-**Критерий готовности:**
-- CI проходит на каждом коммите
-- Секретов в репозитории нет
-- Документация актуальна
-
----
-
-### Приоритет 3: Walk-forward тестирование (1-2 недели)
-
-**Задача 3.1**: Walk-forward движок
-- Разделение 12 мес train / 3 мес test
-- Скользящее окно
-- Подбор параметров на train, проверка на test
-- Файл: `app/backtest/walk_forward.py` (новый)
-
-**Задача 3.2**: Бенчмарки
-- Buy & Hold BTC
-- Buy & Hold ETH
-- Обычный DCA (фиксированные суммы)
-- Хранение в USDT
-- Файл: `app/backtest/benchmarks.py` (новый)
-
-**Задача 3.3**: Метрики
-- Net Profit, Max Drawdown, Sharpe, Sortino, Calmar
-- Profit Factor, Win Rate, Expectancy
-- Комиссии, проскальзывание, exposure
-- Файл: `app/backtest/metrics.py` (новый)
-
-**Критерий готовности:**
-- Положительный результат после комиссий не только на train
-- Max drawdown не выше 10%
-- Параметры устойчивы на соседних окнах
-- Результат не зависит от одной короткой фазы рынка
-
----
-
-### Приоритет 4: Paper Trading (2-3 недели)
-
-**Задача 4.1**: Paper Exchange
-- Виртуальный баланс
-- Имитация исполнения ордеров
-- Учёт комиссий и проскальзывания
-- Файл: `app/exchange/paper_exchange.py` (новый)
-
-**Задача 4.2**: Восстановление состояния
-- После рестарта восстанавливать позиции, ордера, стратегию
-- Checkpoint в PostgreSQL
-- Файл: `app/database/state_manager.py` (новый)
-
-**Задача 4.3**: Мониторинг
-- Ежедневные отчёты
-- Telegram уведомления
-- Алерты об ошибках
-- Файлы: `app/monitoring/`, `app/reporting/`
-
-**Критерий готовности:**
-- Рестарт не меняет состояние
-- Один интервал не обрабатывается дважды
-- Неизвестный ордер блокирует новые сделки
-- Все действия доступны для аудита
-
----
-
-### Приоритет 5: Реальная торговля (после 90 дней paper)
-
-**Задача 5.1**: Execution Engine
-- Уникальный `client_order_id`
-- Идемпотентность
-- Обработка частичного исполнения
-- Файл: `app/execution/execution_engine.py` (новый)
-
-**Задача 5.2**: Reconciliation
-- Сверка баланса, позиций, ордеров с биржей
-- Блокировка при расхождении
-- Файл: `app/execution/reconciliation.py` (новый)
-
-**Задача 5.3**: Пилот (200-500 USDT)
-- Spot, без плеча
-- Мониторинг 30+ дней
-- Анализ каждой сделки
-
-**Критерий готовности:**
-- Минимум 90 дней paper trading
-- Минимум 100 закрытых сделок
-- Положительный результат после комиссий
-- Drawdown не выше 10%
-
----
-
-## 4. График развития
-
-| Приоритет | Описание | Срок | Зависимости |
-|-----------|----------|------|-------------|
-| 1 | Интеграция ядра | ✅ Реализовано, PR pending | — |
-| 2 | CI/CD и чистота | 1-2 дня | Завершить coverage и security scan |
-| 3 | Walk-forward | 1-2 недели | Приоритет 1 |
-| 4 | Paper Trading | 2-3 недели | Приоритет 3 |
-| 5 | Live trading | 90+ дней после paper | Приоритет 4 |
-
-**Общий срок до paper trading**: ~5-6 недель
-**Общий срок до live trading**: ~4-5 месяцев (с учётом 90 дней paper)
-
----
-
-## 5. Результат первого спринта
-
-Реализовано:
-
-1. Созданы типизированные модели `Signal`, `RiskDecision`, `Order`, `Fill`, `Position`.
-2. Risk Engine встроен в Backtest Engine.
-3. Trend DCA подключается к Backtest Engine через единый контракт стратегии.
-4. DCA-уровень подтверждается после исполнения, а не при создании сигнала.
-5. Лимит позиции применяется к итоговой позиции.
-6. Trailing stop использует high-water mark.
-7. Добавлены unit- и сквозные тесты цепочки.
-
-**Результат спринта:**
-- Полная цепочка: `Candle → Indicators → Regime → Signal → Risk → Fill → Portfolio`
-- Работающий backtest с Risk Engine
-- 88 тестов проходят локально
-- Ruff и mypy для изменённых модулей проходят
-- Текущее общее покрытие приложения: 72%; целевые 80% остаются задачей следующего спринта
-
-Не выполнено в рамках спринта:
-
-- фактический backtest на полной исторической выборке BTCUSDT и ETHUSDT;
-- анализ метрик и сравнение с Buy & Hold/DCA;
-- walk-forward проверка параметров.
-
-## 6. Следующий спринт
-
-1. Дождаться прохождения CI и завершить ревью draft PR.
-2. Поднять покрытие приложения с 72% до целевых 80% без исключения критического кода.
-3. Добавить воспроизводимый запуск backtest для BTCUSDT и ETHUSDT.
-4. Реализовать метрики и бенчмарки Buy & Hold, фиксированный DCA и USDT.
-5. Сохранять параметры, сигналы, решения Risk Engine, fills и итоговые метрики запуска.
-6. После проверки одного исторического периода перейти к walk-forward движку.
-
----
-
-## 7. Что пока не делать
-
-- не добавлять Grid (после оценки Trend DCA)
-- не подключать 3Commas
-- не делать live trading (до 90 дней paper)
-- не добавлять фьючерсы, margin, leverage или short
-- не оптимизировать параметры стратегии
-- не увеличивать капитал (до стабильного paper)
-- не строить сложный UI
-- не подключать ML
-
----
-
-## 8. Приоритет проекта
-
-```
-Сохранность капитала
-    → Корректность данных и исполнения
-        → Воспроизводимость backtest
-            → Доходность
-                → Скорость разработки
-```
+- Не вызывать exchange напрямую из стратегии.
+- Не обрабатывать незакрытую свечу как финальную.
+- Не исправлять неоднозначное reconciliation mismatch автоматически.
+- Не анализировать performance sealed holdout до unlock.
+- Не добавлять Grid/ML/leverage/live execution в текущий цикл.

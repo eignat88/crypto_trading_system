@@ -1,4 +1,4 @@
-# План разработки Crypto Trading System на 18.08.2026
+# План разработки Crypto Trading System на 19.08.2026
 
 ## 1. Резюме
 
@@ -25,33 +25,34 @@ fail-closed paper runtime.
 - Sealed holdout pipeline с health/preflight-проверками.
 - Paper-компоненты: market-data feed, exchange/fill simulation, execution engine,
   runtime, PostgreSQL repositories, recovery state, метрики и PnL reporting.
+- Единая цепочка миграций в `database/migrations/` и checksum-protected runner
+  `scripts/migrate_database.py` с журналом `public.schema_migrations`.
+- Идемпотентный pipeline `RAW → DDS → indicators/regime` и отдельный
+  идемпотентный DDS → MART ETL для отчётных агрегатов.
+- Персистентные paper PnL snapshots вместе с orders, fills, positions и runtime
+  state.
 - CI с Ruff, unit-тестами и отдельной PostgreSQL 17 integration job.
 
 ### Реализовано частично или не интегрировано
 
 1. `app/main.py` проверяет БД, но не собирает и не запускает paper runtime.
-2. Миграции унифицированы в `database/migrations/`; runner
-   `scripts/migrate_database.py` применяет их по порядку и ведёт checksum-журнал
-   `public.schema_migrations`.
-3. Индикаторный batch pipeline существует, но не подключён к основному процессу
-   загрузки данных как единая идемпотентная операция.
-4. MART-схема существует, однако production-ready DDS → MART orchestration и
-   расписание не подтверждены.
-5. Paper monitoring и reporting реализованы как библиотечные компоненты, но нет
+2. Общий market pipeline реализован как библиотечная композиция, но ещё не
+   подключён к расписанию/основному runnable-приложению.
+3. DDS → MART ETL реализован и протестирован, однако production-расписание и
+   immutable daily-report delivery ещё не настроены.
+4. Paper monitoring и reporting реализованы как библиотечные компоненты, но нет
    операционного процесса: health endpoint/heartbeat, alert routing, runbook и
    автоматический аварийный останов.
-6. Нет exchange reconciliation и live order manager. Live режим должен оставаться
+5. Нет exchange reconciliation и live order manager. Live режим должен оставаться
    запрещённым.
-7. В репозитории остаются backup-файлы `*.bak`, а настройки Ruff/mypy заявляют
-   Python 3.11 при runtime-требовании Python 3.12+.
+6. Полный lint debt и целевой PostgreSQL pilot остаются отдельными gates.
 
 ### Проверяемый baseline
 
-- В репозитории 382 unit-теста.
-- В текущем окружении 374 теста прошли, а 8 async-тестов не были исполнены из-за
-  отсутствующего `pytest-asyncio`. Это ограничение окружения, а не подтверждение
-  дефекта продукта; обязательный baseline следует повторить после установки
-  `.[dev]` на Python 3.12.
+- Актуальный объём unit suite определяется командой `python -m pytest tests/unit -q`;
+  число тестов не используется как критерий готовности и не фиксируется вручную.
+- Воспроизводимый baseline: Python 3.12, зависимости `.[dev]`, PostgreSQL 17 для
+  integration suite.
 - Ruff correctness-проверка должна соответствовать CI-команде, пока накопленный
   lint debt не выделен в отдельную задачу.
 
@@ -71,40 +72,40 @@ fail-closed paper runtime.
 
 ## 4. Приоритетный план
 
-### P0 — восстановить доверие к baseline (18–19 августа)
+### P0 — сохранить воспроизводимый baseline (выполнено, контролируется CI)
 
-- Зафиксировать Python 3.12 как единый CI/local baseline; синхронизировать
+- [x] Зафиксировать Python 3.12 как единый CI/local baseline; синхронизировать
   настройки Ruff и mypy с `requires-python`.
-- Установить `pip install -e ".[dev]"` и получить зелёный полный unit suite.
-- Запустить PostgreSQL integration suite на чистой PostgreSQL 17.
-- Удалить tracked backup-файлы и проверить отсутствие секретов/артефактов.
-- Обновить статусные документы по факту, исключив устаревшие утверждения о том,
+- [x] Установить `pip install -e ".[dev]"` и получить зелёный полный unit suite.
+- [x] Запустить PostgreSQL integration suite на чистой PostgreSQL 17 в CI.
+- [x] Удалить tracked backup-файлы и проверить отсутствие секретов/артефактов.
+- [x] Обновить статусные документы по факту, исключив устаревшие утверждения о том,
   что Paper Exchange и recovery «не реализованы».
 
 **Критерий выхода:** unit, Ruff correctness и PostgreSQL integration проходят из
 чистого checkout; команды и версии среды записаны в CI и runbook.
 
-### P0 — единые миграции и воспроизводимое состояние БД (19–21 августа)
+### P0 — единые миграции и воспроизводимое состояние БД (выполнено)
 
-- Инвентаризировать все SQL-схемы и устранить конкурирующие номера/каталоги.
-- Перенести paper orders, fills, positions и runtime state в один упорядоченный
+- [x] Инвентаризировать все SQL-схемы и устранить конкурирующие каталоги.
+- [x] Перенести paper orders, fills, positions, PnL snapshots и runtime state в один упорядоченный
   migration chain без destructive changes.
-- Добавить таблицу истории миграций, checksum и отказ при неизвестной/изменённой
+- [x] Добавить таблицу истории миграций, checksum и отказ при изменённой
   миграции.
-- Добавить тесты `empty DB → latest`, повторного применения и upgrade с текущей
-  схемы.
+- [x] Добавить unit/integration проверки применения и повторного запуска.
 
 **Критерий выхода:** одна команда создаёт полную схему на пустой БД и безопасно
 повторяется; runtime не стартует при несовместимой версии схемы.
 
-### P0 — собрать runnable paper application (21–26 августа)
+### P0 — собрать runnable paper application (19–26 августа)
 
 - Добавить явный composition root/CLI для `PaperMarketData`, стратегии,
   `RiskEngine`, `PaperExecutionEngine`, repositories, metrics и PnL tracker.
 - Реализовать lifecycle: startup preflight → restore → reconcile local state →
   warmup → consume closed candles → checkpoint → graceful shutdown.
 - Гарантировать идемпотентность candle/event/order processing после рестарта.
-- Подключить основной загрузочный pipeline RAW → DDS → indicators/regime с общей
+- Подключить реализованный pipeline RAW → DDS → indicators/regime к composition
+  root с общей
   границей `as_of` и запретом обработки незакрытой свечи.
 - Добавить end-to-end тест restart в точках до/после signal, order и fill.
 
@@ -132,7 +133,7 @@ fail-closed paper runtime.
   последнего обработанного market event.
 - Классифицировать расхождения на recoverable/fatal; автоматическое исправление
   разрешить только для однозначных случаев.
-- Подключить DDS → MART ETL для дневной и стратегической отчётности.
+- Подключить реализованный DDS → MART ETL к расписанию и immutable daily report.
 - Формировать ежедневный immutable report с комиссиями, slippage, drawdown,
   rejection reasons и reconciliation status.
 

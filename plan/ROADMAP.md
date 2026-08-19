@@ -1,334 +1,90 @@
-# Роадмэп проекта Crypto Trading System
-
-> Текущий этап: backtest/walk-forward и накопление sealed independent holdout.
-> Performance `Breakout Retest v2` закрыт до `2027-02-06T00:00:00Z`.
-> Paper и live trading заблокированы.
-
-## Текущее состояние
-
-| Компонент | Статус | Файлы |
-|-----------|--------|-------|
-| Структура проекта | ✅ Готово | `pyproject.toml`, `.env.example` |
-| Конфигурация | ✅ Готово | `app/config/settings.py` |
-| PostgreSQL RAW слой | ✅ Готово | `database/migrations/001_create_raw.sql` |
-| PostgreSQL DDS слой и RAW → DDS ETL | ✅ Готово | `database/migrations/002_create_dds.sql`, `database/migrations/005_raw_to_dds_etl.sql`, `scripts/load_dds.py` |
-| PostgreSQL MART схема | 🚧 Частично | `database/migrations/003_create_mart.sql` |
-| Bybit клиент | ✅ Готово | `app/exchange/bybit_client.py` |
-| Сборщик свечей | ✅ Готово | `app/collectors/candle_collector.py` |
-| Сборщик индикаторов | 🚧 Частично | `app/collectors/indicator_collector.py` |
-| Sealed holdout pipeline | ✅ Готово | `scripts/update_holdout_data.py`, `scripts/holdout_validation.py` |
-| Индикаторы (EMA, RSI, ATR) | ✅ Готово | `app/indicators/` |
-| Режим рынка | ✅ Готово | `app/indicators/market_regime.py` |
-| Backtest Engine | ✅ Готово | `app/backtest/`, `app/models/` |
-| Стратегия Trend DCA | ✅ Интегрирована | `app/strategies/trend_dca.py` |
-| Risk Engine | ✅ Готово | `app/risk/risk_engine.py` |
-| Paper Exchange | 🚧 Ядро реализовано, интеграция не завершена | `app/exchange/`, `app/execution/` |
-| Reconciliation | ⏳ Не начато | `app/execution/` |
-| Monitoring/alerts | ⏳ Не начато | `app/monitoring/` |
-| Unit тесты | ✅ Готово | `tests/unit/` |
-
----
-
-## Фаза 1: Инфраструктура данных (1-2 недели)
-
-### T7: Интеграция индикаторов с коллектором
-- [x] Создать `app/collectors/indicator_collector.py`
-- [ ] Интегрировать расчёт EMA, RSI, ATR при загрузке свечей
-- [x] Сохранение индикаторов в DDS слой
-- [x] Инкрементальный расчёт недостающих versioned-строк для sealed holdout
-- [ ] Подключить общий инкрементальный пересчёт к основному pipeline
-
-**Результат**: При загрузке свечей автоматически рассчитываются индикаторы
-
-### T8: Создание DDS слоя
-- [x] Создать `database/migrations/002_create_dds.sql`
-- [x] Таблицы: `dds.instrument`, `dds.candle`, `dds.indicator`, `dds.market_regime`
-- [x] Нормализация данных из RAW в DDS
-- [x] Проверка качества OHLCV данных
-- [x] Создание индексов для производительности
-
-**Результат**: Нормализованный слой данных для стратегий
-
-### T9: Контроль качества данных
-- [x] Проверка: high >= open, high >= close
-- [x] Проверка: low <= open, low <= close
-- [x] Проверка: high >= low, volume >= 0, close > 0
-- [x] Исключение некорректных свечей
-- [x] Отчёт о качестве данных
-
-**Результат**: Чистые данные без аномалий
-
-### T10: Создание MART слоя
-- [x] Создать `database/migrations/003_create_mart.sql`
-- [x] Таблицы: `mart.daily_performance`, `mart.strategy_performance`
-- [ ] Агрегация данных для отчётности
-- [ ] ETL процесс из DDS в MART
-
-**Результат**: Аналитические показатели для отчётов
-
----
-
-## Фаза 2: Бэктестинг и оценка (2-3 недели)
-
-### T11: Интеграция стратегии с backtest
-- [x] Подключить Trend DCA к BacktestEngine
-- [x] Добавить единые модели Signal, RiskDecision, Order, Fill, Position
-- [x] Пропускать каждый ордер через Risk Engine
-- [x] Ограничить итоговую DCA-позицию 10% капитала
-- [x] Добавить сквозной unit-тест цепочки
-- [ ] Настроить параметры стратегии на утверждённом историческом периоде
-- [ ] Запуск бэктеста на исторических данных
-- [ ] Анализ результатов
-
-**Результат**: Работающий бэктест первой стратегии
-
-### T12: Walk-forward тестирование
-- [ ] Разделение данных на обучающие и проверочные периоды
-- [ ] Подбор параметров на прошлом периоде
-- [ ] Проверка на будущем периоде
-- [ ] Скользящее окно (12 мес обучение / 3 мес проверка)
-- [ ] Оценка стабильности параметров
-
-**Результат**: Подтверждение устойчивости стратегии
-
-### T13: Оценка стратегий
-- [ ] Расчёт метрик: Net Profit, Max Drawdown, Sharpe Ratio
-- [ ] Сравнение с Buy & Hold BTC
-- [ ] Сравнение с Buy & Hold ETH
-- [ ] Сравнение с обычным DCA
-- [ ] Отчёт по результатам
-
-**Результат**: Стратегия признана перспективной или отклонена
+# Роадмэп Crypto Trading System
 
-### T14: Вторая стратегия — отложено
+**Срез:** 19.08.2026.
+**Источник текущих приоритетов:** [`DEVELOPMENT_PLAN_2026-08-19.md`](DEVELOPMENT_PLAN_2026-08-19.md).
+**Текущий milestone:** воспроизводимый fail-closed paper runtime. Live trading заблокирован.
 
-Grid и другие стратегии не входят в текущий MVP. Решение вернуться к ним
-принимается только после walk-forward оценки Trend DCA.
+## Выполненный foundation
 
-### Независимая валидация Breakout Retest v2 🚧
+- [x] Python 3.12 local/CI baseline и PostgreSQL 17 integration job.
+- [x] RAW → DDS ETL: closed candles, quality events, checkpoints, run journal.
+- [x] Versioned indicators/regime и инкрементальный market pipeline.
+- [x] Идемпотентный DDS → MART ETL для daily, trade, drawdown и monthly metrics.
+- [x] Backtest/walk-forward foundation с причинным исполнением и audit trail.
+- [x] Trend DCA, Breakout Retest и frozen Breakout Retest v2 specification.
+- [x] Risk Engine и persistent risk state.
+- [x] Paper exchange, fill simulation, execution runtime и PostgreSQL repositories.
+- [x] Paper restart state и persistent PnL snapshots.
+- [x] Канонические checksum-protected PostgreSQL migrations.
+- [x] Sealed holdout ingestion/health/preflight pipeline.
 
-- [x] Заморозить спецификацию стратегии до открытия выборки
-- [x] Реализовать стратегию и state-machine `FAILURE_WATCH`
-- [x] Зафиксировать holdout `2026-08-10` → `2027-02-06`
-- [x] Запретить performance-метрики до даты разблокировки
-- [x] Добавить инкрементальный RAW → DDS → derived → health pipeline
-- [ ] Накопить полную выборку без gaps, duplicates и reconciliation failures
-- [ ] После разблокировки выполнить одноразовую проверку frozen acceptance gates
+## Milestone M1 — runnable paper application (P0)
 
-**Результат**: до 06.02.2027 разрешён только контроль качества данных; это не
-даёт статуса `PAPER_READY` или `LIVE_READY`.
+- [ ] Добавить единственный composition root/CLI.
+- [ ] Выполнять startup preflight и проверку версии схемы.
+- [ ] Восстанавливать runtime, risk, orders, fills, positions и PnL state.
+- [ ] Делать warmup и принимать только закрытые свечи.
+- [ ] Подключить `MarketDataPipeline` с единой границей `as_of`.
+- [ ] Гарантировать graceful shutdown и durable checkpoint.
+- [ ] Безопасно отклонять live mode.
 
----
+**Выход:** 24-часовой soak без дублей, пропусков закрытых свечей и расхождения позиции.
 
-## Фаза 3: Paper Trading (4-6 недель)
+## Milestone M2 — restart/idempotency (P0)
 
-### T15: Paper Exchange модуль
-- [ ] Создать `app/exchange/paper_exchange.py`
-- [ ] Виртуальный баланс
-- [ ] Имитация исполнения ордеров
-- [ ] Учёт комиссий и проскальзывания
-- [ ] Восстановление состояния после перезапуска
+- [ ] E2E restart до/после signal, order и fill.
+- [ ] E2E restart до/после PnL snapshot и checkpoint.
+- [ ] Стабильные `run_id`, `signal_id`, `client_order_id`.
+- [ ] Deterministic replay с одинаковыми state и PnL.
 
-**Результат**: Работающий виртуальный исполнитель
+**Выход:** повторная обработка события не создаёт ордер/fill и не меняет подтверждённый факт.
 
-### T16: Интеграция стратегий с Paper Trading
-- [ ] Подключить Trend DCA к Paper Exchange
-- [ ] Подключить Grid к Paper Exchange
-- [ ] Настроить мультистратегический режим
-- [ ] Тестирование совместной работы
+## Milestone M3 — observability и fail-closed operation (P1)
 
-**Результат**: Стратегии работают в paper режиме
+- [ ] Heartbeat/health endpoint.
+- [ ] Метрики candle lag, pipeline latency, checkpoint age, exposure, PnL/drawdown.
+- [ ] Alert routing для stale data, DB outage, risk breach и state mismatch.
+- [ ] Автоматический emergency stop и контролируемая процедура снятия.
+- [ ] Runbook запуска, остановки, recovery и incident response.
 
-### T17: Мониторинг paper trading
-- [ ] Контроль баланса и позиций
-- [ ] Логирование всех сделок
-- [ ] Ежедневные отчёты
-- [ ] Уведомления об ошибках
+**Выход:** fault-injection подтверждает блокировку новых входов и полный audit trail.
 
-**Результат**: Полная видимость paper trading
+## Milestone M4 — reconciliation и отчётность (P1)
 
-### T18: Критерии перехода к реальным деньгам
-- [ ] Минимум 90 дней работы
-- [ ] Минимум 100 закрытых сделок
-- [ ] Отсутствие критических ошибок
-- [ ] Положительный результат после комиссий
-- [ ] Максимальная просадка в пределах плана
+- [ ] Сверять orders, fills, positions, balance/equity и last market event.
+- [ ] Разделить recoverable и fatal mismatches; неоднозначные случаи закрывать fail-closed.
+- [ ] Запускать готовый DDS → MART ETL по расписанию.
+- [ ] Создавать immutable daily report с costs, slippage, drawdown и rejects.
 
-**Результат**: Решение о переходе к live trading
+**Выход:** внесённое расхождение обнаруживается до нового входа; replay даёт тот же report.
 
----
+## Milestone M5 — paper pilot (P1, минимум 90 дней)
 
-## Фаза 4: Реальная торговля (2-4 недели)
+До старта зафиксировать strategy/version, BTCUSDT/ETHUSDT Spot universe, initial
+capital, risk limits, SLO, инфраструктуру и ответственных.
 
-### T19: Реальный исполнитель ордеров
-- [ ] Создать `app/execution/order_manager.py`
-- [ ] Уникальный client order ID
-- [ ] Идемпотентность операций
-- [ ] Защита от повторного ордера
-- [ ] Обработка частичного исполнения
-- [ ] Режим: `MODE=live` (только через конфигурацию)
+- [ ] 7-дневный наблюдаемый burn-in без изменения стратегии.
+- [ ] Не менее 90 календарных дней и 100 закрытых сделок.
+- [ ] Ноль необъяснённых reconciliation/determinism failures.
+- [ ] Ноль duplicate orders после restart.
+- [ ] Все критические incidents имеют alert и audit trail.
+- [ ] Net PnL положителен после fees/slippage; drawdown в утверждённом limit.
+- [ ] Результат не объясняется одним символом или коротким периодом.
 
-**Результат**: Безопасное исполнение реальных ордеров
+**Выход:** только пакет данных для отдельного live design review, не автоматическое разрешение live.
 
-### T20: Reconciliation модуль
-- [ ] Создать `app/execution/reconciliation.py`
-- [ ] Сверка локального баланса с биржей
-- [ ] Сверка позиций
-- [ ] Сверка ордеров
-- [ ] Сверка исполнений
-- [ ] Автоматическое восстановление расхождений
+## Постоянный поток — sealed holdout до 06.02.2027
 
-**Результат**: Локальное состояние совпадает с биржей
+- [x] Frozen v2 specification и unlock timestamp.
+- [x] Инкрементальный RAW → DDS → derived → health pipeline.
+- [ ] Продолжать загрузку только закрытых BTCUSDT/ETHUSDT 1h candles.
+- [ ] Контролировать gaps, duplicates, provenance, checksums и determinism.
+- [ ] После unlock и проверки sample requirements выполнить ровно один frozen run.
 
-### T21: Реальный пилот (200-500 USDT)
-- [ ] Запуск на минимальном капитале
-- [ ] Мониторинг 30+ дней
-- [ ] Анализ каждой сделки
-- [ ] Проверка риск-лимитов
-- [ ] Документирование инцидентов
+До unlock запрещены backtest, PnL, trade attribution и сравнение версий на holdout.
 
-**Результат**: Система работает стабильно на реальных деньгах
+## Явно вне текущего scope
 
-### T22: Анализ результатов пилота
-- [ ] Сравнение с paper trading
-- [ ] Анализ проскальзывания
-- [ ] Анализ качества исполнения
-- [ ] Оценка реальных комиссий
-- [ ] Рекомендации по масштабированию
-
-**Результат**: Решение о масштабировании
-
----
-
-## Фаза 5: Масштабирование (после стабильной работы 3+ мес)
-
-### T23: Масштабирование до 1000 USDT
-- [ ] Условие: 100+ сделок, нет критических ошибок
-- [ ] Постепенное увеличение капитала
-- [ ] Мониторинг метрик
-- [ ] При необходимости — откат к предыдущему уровню
-
-**Результат**: Система работает на увеличенном капитале
-
-### T24: Масштабирование до 2000 USDT
-- [ ] Условие: 3+ месяца работы, положительное мат. ожидание
-- [ ] Стабильная работа Risk Engine
-- [ ] Диверсификация по активам
-
-**Результат**: Система готова к полной нагрузке
-
-### T25: Финальное масштабирование (до 3000 USDT)
-- [ ] Условие: 6+ месяцев, положительный результат
-- [ ] Независимость от одного актива
-- [ ] Максимальная просадка в пределах плана
-
-**Результат**: Достигнут целевой уровень капитала
-
----
-
-## Фаза 6: Инфраструктура и документация (параллельно)
-
-### T26: Мониторинг и уведомления
-- [ ] Telegram уведомления
-- [ ] Email уведомления
-- [ ] Локальная панель мониторинга
-- [ ] Критические алерты: неизвестный ордер, превышение риска
-
-**Результат**: Полная видимость работы системы
-
-### T27: Отчётность
-- [ ] Ежедневный отчёт
-- [ ] Еженедельный отчёт
-- [ ] Ежемесячный отчёт
-- [ ] Сравнение с бенчмарками
-
-**Результат**: Регулярная отчётность по результатам
-
-### T28: Документация
-- [ ] `ARCHITECTURE.md` — архитектура системы
-- [ ] `RISK_POLICY.md` — политика рисков
-- [ ] `TRADING_RULES.md` — правила торговли
-- [ ] `BACKTEST_METHODOLOGY.md` — методология бэктеста
-- [ ] `DEPLOYMENT.md` — развёртывание
-- [ ] `INCIDENT_RESPONSE.md` — реагирование на инциденты
-
-**Результат**: Полная документация проекта
-
-### T29: Тестирование
-- [ ] Unit тесты: индикаторы, комиссии, позиции, режим рынка
-- [ ] Integration тесты: API, PostgreSQL, ордера
-- [ ] Failure тесты: отключение интернета, недоступность API, повторный запуск
-- [ ] Покрытие кода > 80%
-
-**Результат**: Надёжная тестовая база
-
----
-
-## Приоритеты MVP
-
-### В MVP включено:
-- ✅ Загрузка свечей
-- ✅ PostgreSQL RAW и DDS
-- ✅ EMA, RSI, ATR индикаторы
-- ✅ Одна стратегия Trend DCA
-- ✅ Backtest с комиссиями
-- ✅ Базовый Risk Engine
-- ⏳ Paper Trading (Фаза 3)
-- ⏳ Ежедневный отчёт (Фаза 6)
-- ✅ Emergency stop
-
-### В MVP НЕ включено:
-- ❌ Машинное обучение
-- ❌ Нейросети
-- ❌ Десятки индикаторов
-- ❌ Фьючерсы, кредитное плечо
-- ❌ Арбитраж, копитрейдинг
-- ❌ Высокочастотная торговля
-- ❌ Сложный веб-интерфейс
-- ❌ Автооптимизация параметров в production
-
----
-
-## Критерии готовности проекта
-
-### Техническая готовность:
-- [ ] Исторические данные загружаются без пропусков и дублей
-- [ ] Стратегия воспроизводимо тестируется
-- [ ] Нет использования будущих данных
-- [ ] Комиссии и проскальзывание учитываются
-- [ ] Risk Engine блокирует запрещённые сделки
-- [ ] Paper trading работает после перезапуска
-- [ ] Состояние восстанавливается из PostgreSQL
-- [ ] Формируется ежедневный отчёт
-- [ ] Аварийная остановка протестирована
-- [ ] Все решения записываются в журнал
-
-### Бизнес готовность:
-- [ ] Стратегия превосходит Buy & Hold
-- [ ] Положительный результат после комиссий
-- [ ] Максимальная просадка < 10%
-- [ ] 90+ дней стабильной работы
-- [ ] 100+ закрытых сделок
-
----
-
-## Примерный график
-
-| Фаза | Срок | Зависимости |
-|------|------|-------------|
-| Фаза 1: Инфраструктура данных | 1-2 недели | — |
-| Фаза 2: Бэктестинг | 2-3 недели | Фаза 1 |
-| Фаза 3: Paper Trading | 4-6 недель | Фаза 2 |
-| Фаза 4: Реальная торговля | 2-4 недели | Фаза 3 (90+ дней) |
-| Фаза 5: Масштабирование | 3-6 месяцев | Фаза 4 |
-| Фаза 6: Документация | Параллельно | — |
-
-**Общий срок до первого пилота**: ~3-4 месяца
-**Общий срок до полного масштабирования**: ~9-12 месяцев
-
-
-## Database migrations
-
-- [x] Свести актуальный database contract в `database/migrations/`.
-- [x] Добавить checksum-protected runner `scripts/migrate_database.py`.
-- [x] Использовать единый runner в PostgreSQL integration tests и CI.
+- Grid и новые стратегии до завершения оценки pilot candidate.
+- ML/нейросети, futures, margin, leverage, short, HFT и auto-optimization.
+- Live order manager до выполнения M1–M5 и отдельного go/no-go.
