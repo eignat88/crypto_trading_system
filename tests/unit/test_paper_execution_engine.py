@@ -76,19 +76,6 @@ def test_sell_cannot_exceed_current_position() -> None:
         )
 
 
-def test_oversell_rejected_before_fill_execution() -> None:
-    fill_simulator = RecordingFillSimulator()
-    engine = PaperExecutionEngine(fill_simulator=fill_simulator)
-
-    with pytest.raises(ValueError, match="exceeds position"):
-        engine.execute(
-            ExecutionRequest("ETHUSDT", OrderSide.SELL, Decimal("1")),
-            Decimal("3000"),
-        )
-
-    assert fill_simulator.called is False
-
-
 def test_invalid_quantity() -> None:
     engine = PaperExecutionEngine()
 

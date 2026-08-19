@@ -146,7 +146,15 @@ class PaperExecutionEngine:
         fill_id = str(uuid4())
         now = datetime.now(timezone.utc)
 
+        current = self.positions.get(request.symbol)
+        old_qty = current.quantity if current else Decimal("0")
+        old_price = current.average_price if current else Decimal("0")
         if request.side == OrderSide.SELL:
+            if fill.quantity > old_qty:
+                raise ValueError(
+                    f"Sell quantity {fill.quantity} exceeds position {old_qty} "
+                    f"for {request.symbol}"
+                )
             new_qty = old_qty - fill.quantity
             new_price = old_price if new_qty > 0 else Decimal("0")
         else:

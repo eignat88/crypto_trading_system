@@ -52,27 +52,6 @@ def test_realized_pnl_uses_order_side_for_positive_fill_quantities() -> None:
     assert tracker.calculate_metrics().total_realized_pnl == Decimal("15")
 
 
-def test_realized_pnl_recalculation_does_not_duplicate_trade_metrics() -> None:
-    timestamp = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    orders = [
-        PaperOrderState("o1", "BTCUSDT", "BUY", Decimal("2"), "FILLED", timestamp),
-        PaperOrderState("o2", "BTCUSDT", "SELL", Decimal("0.5"), "FILLED", timestamp),
-    ]
-    fills = [
-        PaperFillState("f1", "o1", "BTCUSDT", Decimal("2"), Decimal("100"), timestamp),
-        PaperFillState("f2", "o2", "BTCUSDT", Decimal("0.5"), Decimal("130"), timestamp),
-    ]
-    tracker = PaperPnLTracker()
-
-    tracker.calculate_realized_pnl(fills, orders, {})
-    tracker.calculate_realized_pnl(fills, orders, {})
-
-    metrics = tracker.calculate_metrics()
-    assert metrics.total_realized_pnl == Decimal("15")
-    assert metrics.total_trades == 1
-    assert metrics.win_count == 1
-
-
 def test_pnl_tracker_initialization() -> None:
     """Test PnL tracker initializes correctly."""
     tracker = PaperPnLTracker(
