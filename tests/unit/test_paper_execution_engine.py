@@ -29,6 +29,14 @@ def test_market_buy_fill() -> None:
 
 def test_market_sell_fill() -> None:
     engine = PaperExecutionEngine()
+    engine.execute(
+        ExecutionRequest(
+            symbol="ETHUSDT",
+            side=OrderSide.BUY,
+            quantity=Decimal("2"),
+        ),
+        Decimal("2500"),
+    )
 
     result = engine.execute(
         ExecutionRequest(
@@ -40,6 +48,22 @@ def test_market_sell_fill() -> None:
     )
 
     assert result.side == OrderSide.SELL
+    assert engine.positions["ETHUSDT"].quantity == Decimal("1")
+    assert engine.positions["ETHUSDT"].average_price == Decimal("2500")
+
+
+def test_sell_cannot_exceed_current_position() -> None:
+    engine = PaperExecutionEngine()
+
+    with pytest.raises(ValueError, match="exceeds position"):
+        engine.execute(
+            ExecutionRequest(
+                symbol="ETHUSDT",
+                side=OrderSide.SELL,
+                quantity=Decimal("1"),
+            ),
+            Decimal("3000"),
+        )
 
 
 def test_invalid_quantity() -> None:
