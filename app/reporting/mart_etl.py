@@ -32,9 +32,9 @@ class MartLoadResult:
 class MartETL:
     """Build MART rows from the live paper reporting state and DDS positions.
 
-    The SQL writes deliberately update every mutable measure on conflict. Replaying
-    the same tracker/collector state therefore repairs rows instead of duplicating
-    them. The supplied session controls the transaction boundary.
+    The SQL writes deliberately update every mutable measure when a MART key already
+    exists. Replaying the same tracker/collector state therefore repairs rows instead
+    of duplicating them. The supplied session controls the transaction boundary.
     """
 
     def __init__(
@@ -252,11 +252,19 @@ ON CONFLICT (report_date, exchange_name) DO UPDATE SET total_trades=EXCLUDED.tot
 """
 
 _UPSERT_DRAWDOWN = """
-INSERT INTO mart.drawdown_history (timestamp, equity, peak_equity, drawdown, drawdown_pct)
-VALUES (:timestamp, :equity, :peak_equity, :drawdown, :drawdown_pct)
-ON CONFLICT (timestamp) DO UPDATE SET equity=EXCLUDED.equity,
- peak_equity=EXCLUDED.peak_equity, drawdown=EXCLUDED.drawdown,
- drawdown_pct=EXCLUDED.drawdown_pct
+MERGE INTO mart.drawdown_history AS target
+USING (VALUES (
+ CAST(:timestamp AS timestamptz), CAST(:equity AS numeric),
+ CAST(:peak_equity AS numeric), CAST(:drawdown AS numeric),
+ CAST(:drawdown_pct AS numeric)))
+ AS source(timestamp, equity, peak_equity, drawdown, drawdown_pct)
+ON target.timestamp = source.timestamp
+WHEN MATCHED THEN UPDATE SET equity=source.equity,
+ peak_equity=source.peak_equity, drawdown=source.drawdown,
+ drawdown_pct=source.drawdown_pct
+WHEN NOT MATCHED THEN INSERT (timestamp, equity, peak_equity, drawdown, drawdown_pct)
+ VALUES (source.timestamp, source.equity, source.peak_equity, source.drawdown,
+ source.drawdown_pct)
 """
 
 _UPSERT_MONTHLY = """

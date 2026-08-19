@@ -21,16 +21,6 @@ async def test_mart_load_is_idempotent() -> None:
     async with async_session_factory() as session:
         transaction = await session.begin()
         try:
-            # Integration databases may have been provisioned from 003 before the
-            # drawdown idempotency key was added. Apply the same idempotent schema
-            # upgrade that production receives when migrations are rerun.
-            await session.execute(
-                text(
-                    "CREATE UNIQUE INDEX IF NOT EXISTS "
-                    "uq_mart_drawdown_history_timestamp "
-                    "ON mart.drawdown_history (timestamp)"
-                )
-            )
             etl = MartETL(session, tracker, collector, "mart-etl-test")
             await etl.load()
             await etl.load()
@@ -42,5 +32,10 @@ async def test_mart_load_is_idempotent() -> None:
                 {"day": timestamp.date(), "exchange": "mart-etl-test"},
             )
             assert count == 1
+            drawdown_count = await session.scalar(
+                text("SELECT count(*) FROM mart.drawdown_history WHERE timestamp=:timestamp"),
+                {"timestamp": timestamp},
+            )
+            assert drawdown_count == 1
         finally:
             await transaction.rollback()

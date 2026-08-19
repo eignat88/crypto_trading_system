@@ -45,7 +45,9 @@ def test_load_aggregates_and_uses_upserts() -> None:
     assert result.trade_statistics == 1
     assert result.drawdown_history == 2
     assert result.monthly_returns == 1
-    assert all("ON CONFLICT" in sql for sql, _ in session.calls[1:])
+    writes = [sql for sql, _ in session.calls[1:]]
+    assert sum("ON CONFLICT" in sql for sql in writes) == 3
+    assert sum("MERGE INTO mart.drawdown_history" in sql for sql in writes) == 2
     daily = session.calls[1][1]
     assert daily is not None
     assert daily["winning_trades"] == 1
