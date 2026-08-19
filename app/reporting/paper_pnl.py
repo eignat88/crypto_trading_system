@@ -11,6 +11,7 @@ from typing import Protocol
 from app.exchange.paper_execution_engine import PaperExecutionEngine
 from app.models.candle import Candle
 from app.models.paper_fill_state import PaperFillState
+from app.models.paper_order_state import PaperOrderState
 from app.models.paper_position_state import PaperPositionState
 
 
@@ -145,6 +146,7 @@ class PaperPnLTracker:
     def calculate_realized_pnl(
         self,
         fills: list[PaperFillState],
+        orders: list[PaperOrderState],
         positions: dict[str, PaperPositionState],
     ) -> Decimal:
         """Calculate realized PnL from executed fills.
@@ -155,19 +157,32 @@ class PaperPnLTracker:
 
         Args:
             fills: List of all fills
+            orders: Orders corresponding to the fills; their side determines direction
             positions: Current positions
 
         Returns:
             Total realized PnL
         """
+        del positions  # The fill history is the source of truth for realized PnL.
+
+        orders_by_id = {order.order_id: order for order in orders}
+
         # Track cumulative position per symbol
-        position_tracker: dict[str, dict] = {}
+        position_tracker: dict[str, dict[str, Decimal]] = {}
         realized_pnl = Decimal("0")
+        trade_pnl_records: list[Decimal] = []
 
         for fill in fills:
             symbol = fill.symbol
             qty = fill.quantity
             price = fill.price
+            order = orders_by_id.get(fill.order_id)
+            if order is None:
+                raise ValueError(f"Order not found for fill {fill.fill_id}")
+
+            side = order.side.upper()
+            if side not in {"BUY", "SELL"}:
+                raise ValueError(f"Unsupported order side: {order.side}")
 
             if symbol not in position_tracker:
                 position_tracker[symbol] = {
@@ -178,14 +193,10 @@ class PaperPnLTracker:
 
             tracker = position_tracker[symbol]
 
-            # Determine if this is a buy or sell based on quantity change
-            # Note: This assumes fills have signed quantity or we need order side info
-            # For now, infer from whether we're adding to or reducing position
-
             current_qty = tracker["quantity"]
-            new_qty = current_qty + qty
 
-            if qty > 0:  # Buy
+            if side == "BUY":
+                new_qty = current_qty + qty
                 # Update average cost
                 old_cost_basis = tracker["cost_basis"]
                 new_cost_basis = old_cost_basis + (qty * price)
@@ -193,8 +204,14 @@ class PaperPnLTracker:
                 tracker["cost_basis"] = new_cost_basis
                 if new_qty > 0:
                     tracker["avg_cost"] = new_cost_basis / new_qty
-            else:  # Sell (negative qty)
-                sell_qty = abs(qty)
+            else:
+                sell_qty = qty
+                if sell_qty > current_qty:
+                    raise ValueError(
+                        f"Sell quantity {sell_qty} exceeds tracked position "
+                        f"{current_qty} for {symbol}"
+                    )
+                new_qty = current_qty - sell_qty
                 # Realize PnL on sold portion
                 avg_cost = tracker["avg_cost"]
                 sale_proceeds = sell_qty * price
@@ -202,12 +219,14 @@ class PaperPnLTracker:
                 trade_pnl = sale_proceeds - cost_of_sold
 
                 realized_pnl += trade_pnl
-                self._trade_pnl.append(trade_pnl)
+                trade_pnl_records.append(trade_pnl)
 
                 # Update tracker
                 tracker["quantity"] = new_qty
                 tracker["cost_basis"] = new_qty * avg_cost if new_qty > 0 else Decimal("0")
 
+        # Replace metrics derived from this complete fill history so recalculation is idempotent.
+        self._trade_pnl = trade_pnl_records
         return realized_pnl
 
     def calculate_unrealized_pnl(
