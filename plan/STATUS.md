@@ -98,13 +98,13 @@
 - Общий автоматический запуск после каждой загрузки свечей ещё не подключён
 
 ### T8: DDS слой и RAW → DDS ETL ✅
-- Добавлена схема DDS (`sql/002_create_dds.sql`)
-- Добавлен идемпотентный ETL закрытых свечей (`sql/005_raw_to_dds_etl.sql`)
+- Добавлена схема DDS (`database/migrations/002_create_dds.sql`)
+- Добавлен идемпотентный ETL закрытых свечей (`database/migrations/005_raw_to_dds_etl.sql`)
 - Добавлены checkpoints, журнал запусков, карантин невалидных строк и проверки качества данных
 - Добавлен CLI-загрузчик `scripts/load_dds.py`
 
 ### T10: MART слой 🚧
-- Добавлена схема аналитических таблиц (`sql/003_create_mart.sql`)
+- Добавлена схема аналитических таблиц (`database/migrations/003_create_mart.sql`)
 - ETL-агрегации из DDS в MART ещё не реализованы
 
 ## Следующие шаги
@@ -160,3 +160,13 @@ python scripts/load_history.py --symbol BTCUSDT --interval 1d --years 2
 # Продолжить загрузку с checkpoint
 python scripts/load_history.py --resume
 ```
+
+
+## Единый механизм миграций
+
+- Канонический каталог: `database/migrations/`; в нём находится полный RAW, DDS,
+  MART, Paper Trading и runtime contract.
+- Единственная штатная команда для локальной, тестовой и CI БД:
+  `python .\scripts\migrate_database.py`.
+- `public.schema_migrations` фиксирует версию, имя, SHA-256 checksum и время
+  применения; повторный запуск пропускает уже применённые файлы.

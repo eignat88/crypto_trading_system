@@ -1,4 +1,3 @@
-BEGIN;
 
 ALTER TABLE dds.indicator
     ADD COLUMN IF NOT EXISTS model_version text;
@@ -88,5 +87,3 @@ CREATE INDEX IF NOT EXISTS idx_backtest_run_model_versions
         regime_model_version,
         execution_model_version
     );
-
-COMMIT;

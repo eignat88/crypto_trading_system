@@ -10,9 +10,9 @@
 |-----------|--------|-------|
 | Структура проекта | ✅ Готово | `pyproject.toml`, `.env.example` |
 | Конфигурация | ✅ Готово | `app/config/settings.py` |
-| PostgreSQL RAW слой | ✅ Готово | `sql/001_create_raw.sql` |
-| PostgreSQL DDS слой и RAW → DDS ETL | ✅ Готово | `sql/002_create_dds.sql`, `sql/005_raw_to_dds_etl.sql`, `scripts/load_dds.py` |
-| PostgreSQL MART схема | 🚧 Частично | `sql/003_create_mart.sql` |
+| PostgreSQL RAW слой | ✅ Готово | `database/migrations/001_create_raw.sql` |
+| PostgreSQL DDS слой и RAW → DDS ETL | ✅ Готово | `database/migrations/002_create_dds.sql`, `database/migrations/005_raw_to_dds_etl.sql`, `scripts/load_dds.py` |
+| PostgreSQL MART схема | 🚧 Частично | `database/migrations/003_create_mart.sql` |
 | Bybit клиент | ✅ Готово | `app/exchange/bybit_client.py` |
 | Сборщик свечей | ✅ Готово | `app/collectors/candle_collector.py` |
 | Сборщик индикаторов | 🚧 Частично | `app/collectors/indicator_collector.py` |
@@ -41,7 +41,7 @@
 **Результат**: При загрузке свечей автоматически рассчитываются индикаторы
 
 ### T8: Создание DDS слоя
-- [x] Создать `sql/002_create_dds.sql`
+- [x] Создать `database/migrations/002_create_dds.sql`
 - [x] Таблицы: `dds.instrument`, `dds.candle`, `dds.indicator`, `dds.market_regime`
 - [x] Нормализация данных из RAW в DDS
 - [x] Проверка качества OHLCV данных
@@ -59,7 +59,7 @@
 **Результат**: Чистые данные без аномалий
 
 ### T10: Создание MART слоя
-- [x] Создать `sql/003_create_mart.sql`
+- [x] Создать `database/migrations/003_create_mart.sql`
 - [x] Таблицы: `mart.daily_performance`, `mart.strategy_performance`
 - [ ] Агрегация данных для отчётности
 - [ ] ETL процесс из DDS в MART
@@ -325,3 +325,10 @@ Grid и другие стратегии не входят в текущий MVP.
 
 **Общий срок до первого пилота**: ~3-4 месяца
 **Общий срок до полного масштабирования**: ~9-12 месяцев
+
+
+## Database migrations
+
+- [x] Свести актуальный database contract в `database/migrations/`.
+- [x] Добавить checksum-protected runner `scripts/migrate_database.py`.
+- [x] Использовать единый runner в PostgreSQL integration tests и CI.

@@ -101,11 +101,11 @@ notepad .env
 # Check database connection
 python .\scripts\check_database.py
 
-# Apply migrations
-psql -U postgres -d crypto_trading -f .\sql\001_create_raw.sql
-psql -U postgres -d crypto_trading -f .\sql\002_create_dds.sql
-psql -U postgres -d crypto_trading -f .\sql\003_create_mart.sql
-psql -U postgres -d crypto_trading -f .\sql\007_create_raw_bybit.sql
+# Apply every pending migration from database/migrations/
+python .\scripts\migrate_database.py
+
+# Optional: target an isolated database explicitly
+python .\scripts\migrate_database.py --database-url $env:TEST_DATABASE_URL
 ```
 
 ## Bybit Connection Check
@@ -190,7 +190,8 @@ crypto_trading_system/
 │   ├── backtest/       # Backtesting engine
 │   ├── monitoring/     # Monitoring
 │   └── reporting/      # Reporting
-├── sql/                # SQL migrations
+├── database/migrations/ # Canonical ordered SQL migrations
+├── sql/                # Non-migration diagnostic SQL
 ├── scripts/            # Utility scripts
 ├── tests/              # Tests
 └── docs/               # Documentation
