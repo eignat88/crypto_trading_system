@@ -9,6 +9,7 @@ import psycopg
 import pytest
 from psycopg import sql
 from psycopg.conninfo import conninfo_to_dict, make_conninfo
+from sqlalchemy.engine import URL
 
 from scripts.migrate_database import apply_migrations
 
@@ -16,18 +17,29 @@ pytestmark = pytest.mark.integration
 
 DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 
+
 def connect(conninfo=DATABASE_URL, *, autocommit=False):
     if not DATABASE_URL:
         pytest.skip("TEST_DATABASE_URL is not configured")
     return psycopg.connect(conninfo, autocommit=autocommit)
 
 
-
 @pytest.fixture(scope="module", autouse=True)
 def isolated_database():
     """Run destructive migration checks without modifying the shared test DB."""
+    if not DATABASE_URL:
+        pytest.skip("TEST_DATABASE_URL is not configured")
     database_name = f"crypto_pipeline_{uuid.uuid4().hex}"
-    database_url = make_conninfo(DATABASE_URL, dbname=database_name)
+    connection_params = conninfo_to_dict(DATABASE_URL)
+    database_conninfo = make_conninfo(DATABASE_URL, dbname=database_name)
+    database_sqlalchemy_url = URL.create(
+        "postgresql+psycopg",
+        username=connection_params.get("user"),
+        password=connection_params.get("password"),
+        host=connection_params.get("host"),
+        port=int(connection_params["port"]) if connection_params.get("port") else None,
+        database=database_name,
+    )
 
     with connect(autocommit=True) as admin_connection:
         with admin_connection.cursor() as cursor:
@@ -38,14 +50,14 @@ def isolated_database():
             )
 
         try:
-            apply_migrations(database_url)
-            apply_migrations(database_url)
-            with connect(database_url) as connection:
+            apply_migrations(database_sqlalchemy_url)
+            apply_migrations(database_sqlalchemy_url)
+            with connect(database_conninfo) as connection:
                 yield connection
         finally:
             # conninfo_to_dict validates that teardown targets only the database
             # generated above, never the shared TEST_DATABASE_URL database.
-            assert conninfo_to_dict(database_url)["dbname"] == database_name
+            assert conninfo_to_dict(database_conninfo)["dbname"] == database_name
             with admin_connection.cursor() as cursor:
                 cursor.execute(
                     sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
