@@ -4,7 +4,7 @@ Tests the full cycle: Runtime -> Engine -> Trade -> Metrics Collector -> Report.
 """
 
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 import tempfile
@@ -161,14 +161,7 @@ class TestPaperReportingFlow:
 
         # Simulate multiple candle processing
         for i in range(10):
-            candle_time = datetime(
-                base_time.year,
-                base_time.month,
-                base_time.day,
-                base_time.hour,
-                base_time.minute + i,
-                tzinfo=timezone.utc,
-            )
+            candle_time = base_time + timedelta(minutes=i)
 
             collector.record_candle_processed(
                 timestamp=candle_time,

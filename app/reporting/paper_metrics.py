@@ -8,19 +8,17 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from app.reporting.paper_pnl import (
+    EquityPoint,
     PaperPnLTracker,
     PnLRecord,
-    EquityPoint,
-    TradingMetrics,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +130,11 @@ class PaperMetricsCollector:
         self.pnl_tracker = pnl_tracker
         self._trade_events: list[dict[str, Any]] = []
         self._candle_events: list[dict[str, Any]] = []
+
+    @property
+    def trade_events(self) -> list[dict[str, Any]]:
+        """Return a defensive copy of the executions collected for reporting."""
+        return [event.copy() for event in self._trade_events]
 
     def record_trade(
         self,
@@ -258,7 +261,9 @@ class PaperMetricsCollector:
             if point.equity > running_peak:
                 running_peak = point.equity
             drawdown = running_peak - point.equity
-            drawdown_pct = (drawdown / running_peak * Decimal("100")) if running_peak > 0 else Decimal("0")
+            drawdown_pct = (
+                (drawdown / running_peak * Decimal("100")) if running_peak > 0 else Decimal("0")
+            )
 
             if drawdown > max_drawdown:
                 max_drawdown = drawdown
@@ -299,9 +304,7 @@ class PaperMetricsCollector:
         final_equity = end_point.equity
         net_pnl = final_equity - initial_capital
         net_pnl_pct = (
-            (net_pnl / initial_capital * Decimal("100"))
-            if initial_capital > 0
-            else Decimal("0")
+            (net_pnl / initial_capital * Decimal("100")) if initial_capital > 0 else Decimal("0")
         )
 
         return PerformanceSummary(
@@ -338,7 +341,7 @@ class PaperMetricsCollector:
             include_equity_curve: Whether to include detailed equity curve
         """
         report_data: dict[str, Any] = {
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
         }
 
         performance = self.generate_performance_summary()
