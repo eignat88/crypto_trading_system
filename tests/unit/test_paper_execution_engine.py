@@ -2,12 +2,22 @@ from decimal import Decimal
 
 import pytest
 
+from app.exchange.fill_simulator import FillResult, FillSimulator
 from app.exchange.paper_execution_engine import (
     ExecutionRequest,
     ExecutionStatus,
     OrderSide,
     PaperExecutionEngine,
 )
+
+
+class RecordingFillSimulator(FillSimulator):
+    def __init__(self) -> None:
+        self.called = False
+
+    def execute(self, quantity: Decimal, market_price: Decimal) -> FillResult:
+        self.called = True
+        return super().execute(quantity, market_price)
 
 
 def test_market_buy_fill() -> None:

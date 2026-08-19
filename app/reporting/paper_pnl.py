@@ -170,6 +170,7 @@ class PaperPnLTracker:
         # Track cumulative position per symbol
         position_tracker: dict[str, dict[str, Decimal]] = {}
         realized_pnl = Decimal("0")
+        trade_pnl_records: list[Decimal] = []
 
         for fill in fills:
             symbol = fill.symbol
@@ -218,12 +219,14 @@ class PaperPnLTracker:
                 trade_pnl = sale_proceeds - cost_of_sold
 
                 realized_pnl += trade_pnl
-                self._trade_pnl.append(trade_pnl)
+                trade_pnl_records.append(trade_pnl)
 
                 # Update tracker
                 tracker["quantity"] = new_qty
                 tracker["cost_basis"] = new_qty * avg_cost if new_qty > 0 else Decimal("0")
 
+        # Replace metrics derived from this complete fill history so recalculation is idempotent.
+        self._trade_pnl = trade_pnl_records
         return realized_pnl
 
     def calculate_unrealized_pnl(

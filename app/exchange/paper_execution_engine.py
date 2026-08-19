@@ -131,6 +131,15 @@ class PaperExecutionEngine:
                 raise RuntimeError("No market candle available")
             market_price = self._last_candle.close
 
+        current = self.positions.get(request.symbol)
+        old_qty = current.quantity if current else Decimal("0")
+        old_price = current.average_price if current else Decimal("0")
+        if request.side == OrderSide.SELL and request.quantity > old_qty:
+            raise ValueError(
+                f"Sell quantity {request.quantity} exceeds position {old_qty} "
+                f"for {request.symbol}"
+            )
+
         fill = self.fill_simulator.execute(quantity=request.quantity, market_price=market_price)
 
         order_id = str(uuid4())
