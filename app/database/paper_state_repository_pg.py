@@ -2,19 +2,21 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.exchange.paper_state_repository import PaperStateRepository
 from app.models.paper_fill_state import PaperFillState
 from app.models.paper_order_state import PaperOrderState
+from app.models.paper_pnl_snapshot_state import PaperPnLSnapshotState
 from app.models.paper_position_state import PaperPositionState
 from app.models.paper_state import PaperRuntimeState
 
 
-class PaperStateRepositoryPostgres:
+class PaperStateRepositoryPostgres(PaperStateRepository):
     """PostgreSQL persistence adapter for paper trading state."""
 
     def __init__(self, connection: Any) -> None:
         self._connection = connection
 
-    async def save_runtime_state(self, state: PaperRuntimeState) -> None:
+    async def save_state(self, state: PaperRuntimeState) -> None:
         await self._connection.execute(
             """
             INSERT INTO paper_runtime_state
@@ -31,9 +33,13 @@ class PaperStateRepositoryPostgres:
             state.cash_balance,
         )
 
-    async def load_runtime_state(self) -> PaperRuntimeState | None:
+    async def load_state(self) -> PaperRuntimeState | None:
         row = await self._connection.fetchrow(
-            "SELECT last_processed_timestamp, last_market_sequence, cash_balance FROM paper_runtime_state WHERE id=1"
+            """
+            SELECT last_processed_timestamp, last_market_sequence, cash_balance
+            FROM paper_runtime_state
+            WHERE id = 1
+            """
         )
         if row is None:
             return None
@@ -43,6 +49,81 @@ class PaperStateRepositoryPostgres:
             cash_balance=row["cash_balance"],
         )
 
+    async def save_runtime_state(self, state: PaperRuntimeState) -> None:
+        """Compatibility alias for the original adapter API."""
+        await self.save_state(state)
+
+    async def load_runtime_state(self) -> PaperRuntimeState | None:
+        """Compatibility alias for the original adapter API."""
+        return await self.load_state()
+
+    async def save_pnl_snapshot(self, snapshot: PaperPnLSnapshotState) -> None:
+        """Insert or replace a snapshot identified by its time and sequence."""
+        snapshot.validate()
+        await self._connection.execute(
+            """
+            INSERT INTO dds.paper_pnl_snapshots (
+                snapshot_time, sequence_no, equity, realized_pnl, unrealized_pnl,
+                total_pnl, fees_paid, slippage, cash_balance, position_value,
+                drawdown, drawdown_pct
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            ON CONFLICT (snapshot_time, sequence_no) DO UPDATE SET
+                equity = EXCLUDED.equity,
+                realized_pnl = EXCLUDED.realized_pnl,
+                unrealized_pnl = EXCLUDED.unrealized_pnl,
+                total_pnl = EXCLUDED.total_pnl,
+                fees_paid = EXCLUDED.fees_paid,
+                slippage = EXCLUDED.slippage,
+                cash_balance = EXCLUDED.cash_balance,
+                position_value = EXCLUDED.position_value,
+                drawdown = EXCLUDED.drawdown,
+                drawdown_pct = EXCLUDED.drawdown_pct
+            """,
+            snapshot.timestamp,
+            snapshot.sequence,
+            snapshot.equity,
+            snapshot.realized_pnl,
+            snapshot.unrealized_pnl,
+            snapshot.total_pnl,
+            snapshot.fees_paid,
+            snapshot.slippage,
+            snapshot.cash_balance,
+            snapshot.position_value,
+            snapshot.drawdown,
+            snapshot.drawdown_pct,
+        )
+
+    async def load_pnl_snapshots(self) -> list[PaperPnLSnapshotState]:
+        """Return snapshots in deterministic equity-curve order."""
+        rows = await self._connection.fetch(
+            """
+            SELECT
+                snapshot_time, sequence_no, equity, realized_pnl, unrealized_pnl,
+                total_pnl, fees_paid, slippage, cash_balance, position_value,
+                drawdown, drawdown_pct
+            FROM dds.paper_pnl_snapshots
+            ORDER BY snapshot_time, sequence_no
+            """
+        )
+        return [
+            PaperPnLSnapshotState(
+                timestamp=row["snapshot_time"],
+                sequence=row["sequence_no"],
+                equity=row["equity"],
+                realized_pnl=row["realized_pnl"],
+                unrealized_pnl=row["unrealized_pnl"],
+                total_pnl=row["total_pnl"],
+                fees_paid=row["fees_paid"],
+                slippage=row["slippage"],
+                cash_balance=row["cash_balance"],
+                position_value=row["position_value"],
+                drawdown=row["drawdown"],
+                drawdown_pct=row["drawdown_pct"],
+            )
+            for row in rows
+        ]
+
     async def save_order(self, order: PaperOrderState) -> None:
         await self._connection.execute(
             """
@@ -50,7 +131,12 @@ class PaperStateRepositoryPostgres:
             VALUES($1,$2,$3,$4,$5,$6)
             ON CONFLICT(order_id) DO UPDATE SET status=EXCLUDED.status
             """,
-            order.order_id, order.symbol, order.side, order.quantity, order.status, order.created_at,
+            order.order_id,
+            order.symbol,
+            order.side,
+            order.quantity,
+            order.status,
+            order.created_at,
         )
 
     async def load_orders(self) -> list[PaperOrderState]:
