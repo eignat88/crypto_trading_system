@@ -1,12 +1,15 @@
 """PostgreSQL 17 integration checks for migrations and RAW -> DDS ETL."""
 
 import os
+import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 import psycopg
 import pytest
+from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 pytestmark = pytest.mark.integration
 
@@ -15,10 +18,10 @@ PROJECT_ROOT = Path(__file__).parents[2]
 MIGRATIONS = sorted((PROJECT_ROOT / "sql").glob("[0-9][0-9][0-9]_*.sql"))
 
 
-def connect():
+def connect(conninfo=DATABASE_URL, *, autocommit=False):
     if not DATABASE_URL:
         pytest.skip("TEST_DATABASE_URL is not configured")
-    return psycopg.connect(DATABASE_URL)
+    return psycopg.connect(conninfo, autocommit=autocommit)
 
 
 def apply_all_migrations(connection) -> None:
@@ -30,20 +33,33 @@ def apply_all_migrations(connection) -> None:
 
 @pytest.fixture(scope="module", autouse=True)
 def isolated_database():
-    connection = connect()
-    with connection.cursor() as cursor:
-        cursor.execute("DROP SCHEMA IF EXISTS mart CASCADE")
-        cursor.execute("DROP SCHEMA IF EXISTS dds CASCADE")
-        cursor.execute("DROP SCHEMA IF EXISTS raw_market CASCADE")
-        cursor.execute("DROP SCHEMA IF EXISTS raw_account CASCADE")
-        cursor.execute("DROP SCHEMA IF EXISTS raw_system CASCADE")
-        cursor.execute("DROP TABLE IF EXISTS risk_events CASCADE")
-        cursor.execute("DROP TABLE IF EXISTS risk_engine_state CASCADE")
-    connection.commit()
-    apply_all_migrations(connection)
-    apply_all_migrations(connection)
-    yield connection
-    connection.close()
+    """Run destructive migration checks without modifying the shared test DB."""
+    database_name = f"crypto_pipeline_{uuid.uuid4().hex}"
+    database_url = make_conninfo(DATABASE_URL, dbname=database_name)
+
+    with connect(autocommit=True) as admin_connection:
+        with admin_connection.cursor() as cursor:
+            cursor.execute(
+                sql.SQL("CREATE DATABASE {} TEMPLATE template0").format(
+                    sql.Identifier(database_name)
+                )
+            )
+
+        try:
+            with connect(database_url) as connection:
+                apply_all_migrations(connection)
+                apply_all_migrations(connection)
+                yield connection
+        finally:
+            # conninfo_to_dict validates that teardown targets only the database
+            # generated above, never the shared TEST_DATABASE_URL database.
+            assert conninfo_to_dict(database_url)["dbname"] == database_name
+            with admin_connection.cursor() as cursor:
+                cursor.execute(
+                    sql.SQL("DROP DATABASE {} WITH (FORCE)").format(
+                        sql.Identifier(database_name)
+                    )
+                )
 
 
 def insert_raw_candle(
