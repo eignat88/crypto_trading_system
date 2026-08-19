@@ -76,6 +76,23 @@ def test_sell_cannot_exceed_current_position() -> None:
         )
 
 
+def test_oversell_rejected_before_fill_simulation() -> None:
+    simulator = RecordingFillSimulator()
+    engine = PaperExecutionEngine(fill_simulator=simulator)
+
+    with pytest.raises(ValueError, match="exceeds position"):
+        engine.execute(
+            ExecutionRequest(
+                symbol="BTCUSDT",
+                side=OrderSide.SELL,
+                quantity=Decimal("1"),
+            ),
+            Decimal("60000"),
+        )
+
+    assert simulator.called is False
+
+
 def test_invalid_quantity() -> None:
     engine = PaperExecutionEngine()
 
