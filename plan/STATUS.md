@@ -1,6 +1,6 @@
 # Статус проекта Crypto Trading System
 
-## Текущий этап — 19.08.2026
+## Текущий этап — 20.08.2026
 
 Актуальные приоритеты и критерии выхода зафиксированы в
 [`DEVELOPMENT_PLAN_2026-08-19.md`](DEVELOPMENT_PLAN_2026-08-19.md).
@@ -16,7 +16,7 @@ independent holdout `Breakout Retest v2`. Holdout BTCUSDT/ETHUSDT 1h накап�
 |---|---|---|---|
 | Python/CI baseline | ✅ Готово | Python 3.12, Ruff correctness, unit и PostgreSQL 17 jobs | Поддерживать зелёный CI |
 | RAW → DDS | ✅ Готово | Идемпотентный ETL, quality quarantine, checkpoints | Пилот на целевой PostgreSQL |
-| Indicators/regime | ✅ Код готов | Инкрементальный versioned pipeline | Подключить к runnable scheduler |
+| Indicators/regime | ✅ Готово | Managed closed-candle pipeline, readiness и fail-closed gate | Провести PostgreSQL soak |
 | DDS → MART | ✅ Код готов | Идемпотентные daily/trade/drawdown/monthly агрегаты | Расписание и immutable daily report |
 | Миграции | ✅ Готово | Канонический каталог, checksum journal, repeat-safe runner | Проверять upgrade path при новых DDL |
 | Backtest/walk-forward | ✅ Ядро готово | N → N+1, costs, portfolio, audit trail | Утвердить pilot strategy |
@@ -32,6 +32,8 @@ independent holdout `Breakout Retest v2`. Holdout BTCUSDT/ETHUSDT 1h накап�
   записываются в `public.schema_migrations`.
 - `MarketDataPipeline` объединяет RAW → DDS и инкрементальный расчёт
   indicators/regime; его библиотечная композиция готова, операционный scheduler — нет.
+- Managed pipeline integration suite подтверждает полный closed-candle flow, durable
+  restart с восстановлением sequence/position/PnL и запрет стратегии до EMA200 warmup.
 - DDS → MART ETL реализует идемпотентное заполнение `daily_performance`,
   `trade_statistics`, `drawdown_history` и `monthly_returns`.
 - Paper persistence включает orders, fills, positions, runtime/recovery state и PnL
@@ -42,8 +44,7 @@ independent holdout `Breakout Retest v2`. Holdout BTCUSDT/ETHUSDT 1h накап�
 1. Подключить long-running closed-candle feed к готовому composition root и провести
    24-часовой soak.
 2. Расширить restart/idempotency E2E вокруг signal, order, fill и PnL snapshot на PostgreSQL.
-3. Подключить market pipeline и MART ETL к управляемому расписанию с общей границей
-   `as_of` и запретом незакрытых свечей.
+3. Провести soak managed market pipeline и фонового MART ETL на целевой БД.
 4. Реализовать heartbeat, alert routing и fail-closed emergency stop.
 5. Реализовать reconciliation orders/fills/positions/equity/last market event.
 6. Провести целевой PostgreSQL pilot по `postgresql_pilot_runbook.md`.
