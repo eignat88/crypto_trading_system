@@ -5,6 +5,7 @@ import signal
 
 import structlog
 
+from app.monitoring.notifier import NotificationLevel, send_notification
 from app.runtime.dependencies import PaperDependencies
 from app.runtime.lifecycle import RuntimeLifecycle, RuntimeState
 from app.runtime.preflight import StartupPreflight
@@ -78,6 +79,18 @@ class PaperApplication:
             name="paper-trading-runtime",
         )
         self._logger.info("paper_runtime_started", trading_enabled=self.trading_enabled)
+        if self.dependencies.heartbeat is not None:
+            await self.dependencies.heartbeat.beat(
+                state="RUNNING",
+                sequence=self.dependencies.runtime.last_checkpoint_sequence,
+            )
+        if self.dependencies.notifier is not None:
+            await send_notification(
+                self.dependencies.notifier,
+                NotificationLevel.INFO,
+                "Runtime started",
+                self.dependencies.heartbeat.runtime_id if self.dependencies.heartbeat else None,
+            )
 
     async def stop(self) -> None:
         async with self._stop_lock:
@@ -94,8 +107,13 @@ class PaperApplication:
                 await self.dependencies.runtime.checkpoint()
             if self.dependencies.pnl_checkpoint is not None:
                 await self.dependencies.pnl_checkpoint()
-            await self.dependencies.close()
             self.lifecycle.transition(RuntimeState.STOPPED)
+            if self.dependencies.heartbeat is not None:
+                await self.dependencies.heartbeat.beat(
+                    state="STOPPED",
+                    sequence=self.dependencies.runtime.last_checkpoint_sequence,
+                )
+            await self.dependencies.close()
 
     async def run(self) -> None:
         loop = asyncio.get_running_loop()

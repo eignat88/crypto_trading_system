@@ -14,6 +14,8 @@ from app.exchange.paper_execution_engine import ExecutionRequest, PaperExecution
 from app.exchange.paper_market_data import PaperMarketData
 from app.exchange.paper_state_repository import PaperStateRepository
 from app.execution.paper_trading_runtime import PaperTradingRuntime
+from app.monitoring.heartbeat import Heartbeat, PostgresHeartbeatRepository
+from app.monitoring.notifier import ConsoleNotifier, Notifier
 from app.risk.persistence import PostgresRiskStateStore
 from app.risk.risk_engine import RiskConfig, RiskEngine
 
@@ -66,6 +68,8 @@ class PaperDependencies:
     warmup_candles: int = 200
     pnl_checkpoint: Callable[[], Awaitable[None]] | None = None
     metadata: dict[str, Any] | None = None
+    heartbeat: Heartbeat | None = None
+    notifier: Notifier | None = None
 
 
 async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
@@ -86,11 +90,13 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     capital = Decimal(str(settings.paper_initial_balance))
     execution = PaperExecutionEngine(state_repository=repository)
     execution.cash_balance = capital
+    heartbeat = Heartbeat("paper-runtime-001", PostgresHeartbeatRepository(connection))
     runtime = PaperTradingRuntime(
         market_data=PaperMarketData([]),
         execution_engine=execution,
         risk_manager=RiskEngineAdapter(risk_engine, capital),
         state_repository=repository,
+        heartbeat=heartbeat,
     )
 
     async def database_check() -> bool:
@@ -142,4 +148,6 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         initial_capital=capital,
         risk_config=risk_config,
         pnl_checkpoint=pnl_checkpoint,
+        heartbeat=heartbeat,
+        notifier=ConsoleNotifier(),
     )

@@ -15,6 +15,7 @@ from app.exchange.paper_state_repository import PaperStateRepository
 from app.models.candle import Candle
 from app.models.market_event import MarketEvent
 from app.models.paper_state import PaperRuntimeState
+from app.monitoring.heartbeat import Heartbeat
 from app.monitoring.paper_metrics import PaperMetricsCollector
 
 logger = logging.getLogger(__name__)
@@ -57,6 +58,7 @@ class PaperTradingRuntime:
         state_repository: PaperStateRepository | None = None,
         metrics_collector: PaperMetricsCollector | None = None,
         checkpoint_interval: int = 1,  # Checkpoint every N candles
+        heartbeat: Heartbeat | None = None,
     ) -> None:
         self.market_data = market_data
         self.execution_engine = execution_engine
@@ -65,6 +67,7 @@ class PaperTradingRuntime:
         self.state_repository = state_repository
         self.metrics_collector = metrics_collector
         self.checkpoint_interval = checkpoint_interval
+        self.heartbeat = heartbeat
 
         self._running = False
         self._candles_processed = 0
@@ -254,6 +257,12 @@ class PaperTradingRuntime:
         # Checkpoint at specified interval
         if self._candles_processed % self.checkpoint_interval == 0:
             await self._checkpoint()
+        if self.heartbeat is not None:
+            await self.heartbeat.beat(
+                state="RUNNING",
+                sequence=sequence,
+                last_market_event_time=candle.close_time,
+            )
 
     async def run_async(self, *, restore_on_start: bool = True) -> None:
         """Run the paper trading runtime asynchronously.
