@@ -5,12 +5,11 @@ import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
 import structlog
 
 from app.exchange.paper_execution_engine import ExecutionRequest, OrderSide, PaperExecutionEngine
-from app.exchange.paper_market_data import PaperMarketData
 from app.exchange.paper_state_repository import PaperStateRepository
 from app.models.candle import Candle
 from app.models.market_event import MarketEvent
@@ -25,7 +24,11 @@ event_logger = structlog.get_logger()
 class StrategyProtocol(Protocol):
     """Protocol for trading strategies."""
 
-    async def on_candle(self, candle: Candle, engine: PaperExecutionEngine) -> list[ExecutionRequest]:
+    async def on_candle(
+        self,
+        candle: Candle,
+        engine: PaperExecutionEngine,
+    ) -> list[ExecutionRequest]:
         """Process candle and return execution requests."""
         ...
 
@@ -33,7 +36,11 @@ class StrategyProtocol(Protocol):
 class RiskManagerProtocol(Protocol):
     """Protocol for risk management."""
 
-    async def validate_request(self, request: ExecutionRequest, engine: PaperExecutionEngine) -> bool:
+    async def validate_request(
+        self,
+        request: ExecutionRequest,
+        engine: PaperExecutionEngine,
+    ) -> bool:
         """Validate execution request against risk limits."""
         ...
 
@@ -51,7 +58,7 @@ class PaperTradingRuntime:
 
     def __init__(
         self,
-        market_data: PaperMarketData,
+        market_data: Any,
         execution_engine: PaperExecutionEngine,
         strategy: StrategyProtocol | None = None,
         risk_manager: RiskManagerProtocol | None = None,
@@ -90,6 +97,11 @@ class PaperTradingRuntime:
         return self._last_checkpoint_sequence
 
     @property
+    def last_processed_sequence(self) -> int:
+        """Last event accepted by the execution engine, durable or not yet flushed."""
+        return self.execution_engine.last_sequence
+
+    @property
     def start_time(self) -> datetime | None:
         return self._start_time
 
@@ -114,6 +126,13 @@ class PaperTradingRuntime:
                 )
                 # Restore execution engine state
                 await self.execution_engine.restore_state()
+                self._last_checkpoint_sequence = state.last_market_sequence
+                restore_boundary = getattr(self.market_data, "restore_boundary", None)
+                if restore_boundary is not None:
+                    restore_boundary(
+                        state.last_market_sequence,
+                        state.last_processed_timestamp,
+                    )
                 event_logger.info(
                     "state_restored", sequence=state.last_market_sequence
                 )
@@ -187,17 +206,23 @@ class PaperTradingRuntime:
         logger.debug("Processing candle: sequence=%d, time=%s", sequence, candle.open_time)
 
         # Update execution engine with market data
-        self.execution_engine.on_market_event(event)
+        if not self.execution_engine.on_market_event(event):
+            event_logger.info("duplicate_event_ignored", sequence=sequence)
+            return
 
         # Run strategy if configured
-        if self.strategy is not None and self.trading_enabled:
+        source_ready = getattr(self.market_data, "ready", True)
+        if self.strategy is not None and self.trading_enabled and source_ready:
             try:
                 requests = await self.strategy.on_candle(candle, self.execution_engine)
 
                 for request_index, request in enumerate(requests):
                     # Validate through risk manager
                     if self.risk_manager is not None:
-                        if not await self.risk_manager.validate_request(request, self.execution_engine):
+                        if not await self.risk_manager.validate_request(
+                            request,
+                            self.execution_engine,
+                        ):
                             logger.warning("Risk validation failed for request: %s", request)
 
                             # Emit metrics event
@@ -236,13 +261,21 @@ class PaperTradingRuntime:
                     except Exception as e:
                         logger.error("Execution failed: %s", e)
                         if self.metrics_collector is not None:
-                            self.metrics_collector.emit_execution_error(e, sequence=sequence, symbol=request.symbol)
+                            self.metrics_collector.emit_execution_error(
+                                e,
+                                sequence=sequence,
+                                symbol=request.symbol,
+                            )
                         raise
 
             except Exception as e:
                 logger.error("Strategy error: %s", e)
                 if self.metrics_collector is not None:
-                    self.metrics_collector.emit_execution_error(e, sequence=sequence, symbol=candle.symbol)
+                    self.metrics_collector.emit_execution_error(
+                        e,
+                        sequence=sequence,
+                        symbol=candle.symbol,
+                    )
                 raise
 
         self._candles_processed += 1
@@ -284,7 +317,6 @@ class PaperTradingRuntime:
         logger.info("PaperTradingRuntime starting...")
 
         # Emit runtime started metric
-        restored = False
         if self.metrics_collector is not None:
             self.metrics_collector.emit_runtime_started(restored_from_checkpoint=False)
 
@@ -293,7 +325,6 @@ class PaperTradingRuntime:
             restored_state = await self.restore_state() if restore_on_start else None
 
             if restored_state is not None:
-                restored = True
                 logger.info(
                     "State restored: last_sequence=%d, last_timestamp=%s",
                     restored_state.last_market_sequence,
@@ -325,9 +356,17 @@ class PaperTradingRuntime:
 
             # Emit runtime stopped metric
             if self.metrics_collector is not None:
-                self.metrics_collector.emit_runtime_stopped(reason="normal shutdown" if not self._shutdown_event.is_set() else "user requested")
+                reason = (
+                    "normal shutdown"
+                    if not self._shutdown_event.is_set()
+                    else "user requested"
+                )
+                self.metrics_collector.emit_runtime_stopped(reason=reason)
 
-            logger.info("PaperTradingRuntime stopped. Candles processed: %d", self._candles_processed)
+            logger.info(
+                "PaperTradingRuntime stopped. Candles processed: %d",
+                self._candles_processed,
+            )
 
     async def _market_event_stream(self) -> AsyncIterator[MarketEvent]:
         """Stream market events from PaperMarketData.
@@ -335,17 +374,25 @@ class PaperTradingRuntime:
         Yields:
             MarketEvent instances from the market data source.
         """
-        for event in self.market_data.stream():
-            if self._shutdown_event.is_set():
-                break
-            yield event
-            # Allow other tasks to run
-            await asyncio.sleep(0)
+        if hasattr(self.market_data, "stream_async"):
+            async for event in self.market_data.stream_async():
+                if self._shutdown_event.is_set():
+                    break
+                yield event
+        else:
+            for event in self.market_data.stream():
+                if self._shutdown_event.is_set():
+                    break
+                yield event
+                await asyncio.sleep(0)
 
     def stop(self) -> None:
         """Request graceful shutdown."""
         logger.info("Stop requested")
         self._shutdown_event.set()
+        stop_source = getattr(self.market_data, "stop", None)
+        if stop_source is not None:
+            stop_source()
 
     async def checkpoint(self) -> None:
         """Persist a checkpoint even when the market loop was never started."""
@@ -373,7 +420,11 @@ class DefaultRiskManager:
         self.max_position_size = max_position_size
         self.max_order_value = max_order_value
 
-    async def validate_request(self, request: ExecutionRequest, engine: PaperExecutionEngine) -> bool:
+    async def validate_request(
+        self,
+        request: ExecutionRequest,
+        engine: PaperExecutionEngine,
+    ) -> bool:
         """Validate execution request."""
         if self.max_order_value is not None:
             price = engine.last_candle.close if engine.last_candle else Decimal("0")

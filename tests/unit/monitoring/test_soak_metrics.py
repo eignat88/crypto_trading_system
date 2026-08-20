@@ -26,6 +26,22 @@ def test_soak_metrics_serializes_runtime_uptime():
     assert metrics.to_dict()["heartbeats"][0]["uptime_seconds"] == 12
 
 
+def test_runtime_progress_counts_deltas_only() -> None:
+    metrics = SoakMetrics()
+
+    assert [metrics.record_runtime_progress(value) for value in (5, 5, 7)] == [5, 0, 2]
+    assert metrics.counters["market_events"] == 7
+    assert metrics.counters["pipeline_events"] == 7
+
+
+def test_runtime_progress_with_no_events_keeps_report_counters_empty() -> None:
+    metrics = SoakMetrics()
+
+    assert metrics.record_runtime_progress(0) == 0
+    assert metrics.counters.get("market_events", 0) == 0
+    assert metrics.counters.get("pipeline_events", 0) == 0
+
+
 def test_risk_block_is_recorded_as_warning_without_raising(capsys):
     metrics = SoakMetrics()
     risk = RiskHealthResult(

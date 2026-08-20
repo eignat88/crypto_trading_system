@@ -145,15 +145,16 @@ class PaperExecutionEngine:
         await self.state_repository.save_position(position)  # type: ignore[attr-defined]
         await self._save_state()
 
-    def on_market_event(self, event: MarketEvent) -> None:
+    def on_market_event(self, event: MarketEvent) -> bool:
         event.candle.validate()
         if event.sequence <= self._last_sequence:
-            return
-        if self._last_candle and event.candle.open_time <= self._last_candle.open_time:
-            return
+            return False
+        if self._last_candle and event.candle.open_time < self._last_candle.open_time:
+            return False
         self._last_sequence = event.sequence
         self._last_candle = event.candle
         self._schedule_save_state()
+        return True
 
     def on_candle(self, candle: Candle) -> None:
         self.on_market_event(MarketEvent(candle=candle, sequence=self._last_sequence + 1))

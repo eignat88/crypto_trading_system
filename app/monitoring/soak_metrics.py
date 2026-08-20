@@ -58,6 +58,18 @@ class SoakMetrics:
     pnl_snapshots: list[PnlSnapshot] = field(default_factory=list)
     counters: dict[str, int] = field(default_factory=dict)
     violations: list[str] = field(default_factory=list)
+    _runtime_candles_observed: int = field(default=0, repr=False)
+
+    def record_runtime_progress(self, candles_processed: int) -> int:
+        """Record only newly processed runtime candles since the prior sample."""
+        if candles_processed < 0:
+            raise ValueError("candles_processed cannot be negative")
+        delta = max(0, candles_processed - self._runtime_candles_observed)
+        if delta:
+            self.increment("market_events", delta)
+            self.increment("pipeline_events", delta)
+        self._runtime_candles_observed = candles_processed
+        return delta
 
     def record_heartbeat(self, snapshot: RuntimeHealth) -> None:
         if self.heartbeats and snapshot.sequence < self.heartbeats[-1].sequence:

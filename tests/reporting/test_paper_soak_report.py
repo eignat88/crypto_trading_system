@@ -16,6 +16,7 @@ def test_report_contains_validation_sections_and_writes_json(tmp_path):
         RuntimeHealth("runtime-1", "RUNNING", 3, now + timedelta(minutes=2), now, now)
     )
     metrics.increment("orders_created", 2)
+    metrics.record_runtime_progress(1)
 
     destination = PaperSoakReport(session, metrics).write(tmp_path / "report.json")
     report = json.loads(destination.read_text(encoding="utf-8"))
@@ -23,3 +24,5 @@ def test_report_contains_validation_sections_and_writes_json(tmp_path):
     assert report["title"] == "Paper Soak Validation Report"
     assert report["runtime"]["total_uptime_seconds"] == 120
     assert report["execution"]["orders_created"] == 2
+    assert report["market_data"]["events_processed"] == 1
+    assert report["pipeline"]["events_processed"] == 1

@@ -78,6 +78,18 @@ async def test_insufficient_warmup_disables_orders_but_starts_runtime() -> None:
     await app.stop()
 
 
+async def test_market_data_not_ready_disables_trading_with_sufficient_warmup() -> None:
+    deps = dependencies(Repository())
+    deps.runtime.market_data.ready = False
+    app = PaperApplication(deps)
+
+    await app.start()
+
+    assert not app.trading_enabled
+    assert not deps.runtime.trading_enabled
+    await app.stop()
+
+
 async def test_unknown_mode_never_starts_execution() -> None:
     deps = dependencies(Repository())
     deps.trading_mode = "test"
