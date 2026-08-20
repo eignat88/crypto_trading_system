@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from typing import cast
 
 import asyncpg  # type: ignore[import-untyped]
 import structlog
@@ -64,7 +63,7 @@ class BybitPaperMarketData:
 
     @staticmethod
     def _latest_closed_boundary(now: datetime) -> datetime:
-        return cast(datetime, align_to_interval(now, timedelta(hours=1)))
+        return align_to_interval(now, timedelta(hours=1))
 
     async def _stats(self) -> dict[str, asyncpg.Record]:
         rows = await self.connection.fetch(

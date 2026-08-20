@@ -5,7 +5,7 @@ import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Protocol, cast
+from typing import Any, Protocol
 
 import structlog
 
@@ -99,7 +99,7 @@ class PaperTradingRuntime:
     @property
     def last_processed_sequence(self) -> int:
         """Last event accepted by the execution engine, durable or not yet flushed."""
-        return cast(int, self.execution_engine.last_sequence)
+        return self.execution_engine.last_sequence
 
     @property
     def start_time(self) -> datetime | None:
