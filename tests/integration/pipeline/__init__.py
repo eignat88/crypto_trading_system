@@ -1,0 +1,1 @@
+"""Managed pipeline integration tests."""

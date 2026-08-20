@@ -1,90 +1,82 @@
 # Роадмэп Crypto Trading System
 
-**Срез:** 19.08.2026.
+**Срез:** 20.08.2026.
 **Источник текущих приоритетов:** [`DEVELOPMENT_PLAN_2026-08-19.md`](DEVELOPMENT_PLAN_2026-08-19.md).
-**Текущий milestone:** воспроизводимый fail-closed paper runtime. Live trading заблокирован.
+**Текущий milestone:** доказать эксплуатационную готовность paper-контура. Live trading заблокирован.
 
 ## Выполненный foundation
 
 - [x] Python 3.12 local/CI baseline и PostgreSQL 17 integration job.
-- [x] RAW → DDS ETL: closed candles, quality events, checkpoints, run journal.
-- [x] Versioned indicators/regime и инкрементальный market pipeline.
-- [x] Идемпотентный DDS → MART ETL для daily, trade, drawdown и monthly metrics.
-- [x] Backtest/walk-forward foundation с причинным исполнением и audit trail.
-- [x] Trend DCA, Breakout Retest и frozen Breakout Retest v2 specification.
-- [x] Risk Engine и persistent risk state.
-- [x] Paper exchange, fill simulation, execution runtime и PostgreSQL repositories.
-- [x] Paper restart state и persistent PnL snapshots.
-- [x] Канонические checksum-protected PostgreSQL migrations.
-- [x] Sealed holdout ingestion/health/preflight pipeline.
+- [x] Идемпотентные RAW → DDS → indicators/regime и DDS → MART pipelines.
+- [x] Backtest/walk-forward, стратегии, Risk Engine и sealed holdout pipeline.
+- [x] Paper execution, PostgreSQL persistence, PnL snapshots и checksum-protected migrations.
+- [x] Единственный paper composition root с preflight, restore, warmup и graceful shutdown.
+- [x] Managed closed-candle pipeline до paper execution.
+- [x] Restart/idempotency E2E для sequence, checkpoint, order/fill и PnL restore.
+- [x] Durable heartbeat, health monitors, notifier abstraction и emergency-stop primitive.
+- [x] Ограниченный soak runner и JSON evidence report.
 
-## Milestone M1 — runnable paper application (P0)
+## Milestone M1 — runnable paper application (код завершён)
 
-- [ ] Добавить единственный composition root/CLI.
-- [ ] Выполнять startup preflight и проверку версии схемы.
-- [ ] Восстанавливать runtime, risk, orders, fills, positions и PnL state.
-- [ ] Делать warmup и принимать только закрытые свечи.
-- [ ] Подключить `MarketDataPipeline` с единой границей `as_of`.
-- [ ] Гарантировать graceful shutdown и durable checkpoint.
-- [ ] Безопасно отклонять live mode.
+- [x] Fail-closed startup и проверка migration 050.
+- [x] Restore runtime/risk/orders/fills/positions/PnL до обработки событий.
+- [x] EMA200 warmup gate и обработка только закрытых свечей.
+- [x] Durable checkpoint и signal-aware shutdown.
+- [x] Безопасный отказ для любого режима кроме `paper`.
 
-**Выход:** 24-часовой soak без дублей, пропусков закрытых свечей и расхождения позиции.
+**Открытый gate:** production dependency builder пока создаёт конечный пустой
+`PaperMarketData`; реальный long-running source должен быть подключён и проверен на стенде.
 
-## Milestone M2 — restart/idempotency (P0)
+## Milestone M2 — restart/idempotency (код завершён, стендовый gate открыт)
 
-- [ ] E2E restart до/после signal, order и fill.
-- [ ] E2E restart до/после PnL snapshot и checkpoint.
-- [ ] Стабильные `run_id`, `signal_id`, `client_order_id`.
-- [ ] Deterministic replay с одинаковыми state и PnL.
+- [x] E2E restart вокруг runtime state, sequence, order/fill и PnL snapshot.
+- [x] Детерминированный `client_order_id` и защита от повторного ордера после restore.
+- [x] Durable managed-pipeline checkpoint и повторная обработка без изменения факта.
+- [ ] Выполнить управляемый restart в 24–72-часовом PostgreSQL soak.
+- [ ] Добавить единый paper `run_id`/`signal_id` во все operational events.
 
-**Выход:** повторная обработка события не создаёт ордер/fill и не меняет подтверждённый факт.
+## Milestone M3 — observability и fail-closed operation (в работе)
 
-## Milestone M3 — observability и fail-closed operation (P1)
+- [x] Persistent heartbeat в `monitoring.runtime_health`.
+- [x] Database, market, pipeline и risk health monitors.
+- [x] Console notifier и идемпотентный emergency-stop coordinator.
+- [x] Soak session/metrics/JSON report и CLI `scripts/run_paper_soak.py`.
+- [ ] Встроить все monitors и emergency stop в непрерывный runtime loop.
+- [ ] Настроить внешний alert routing и freshness watchdog (health endpoint либо supervisor).
+- [ ] Добавить fault-injection для DB outage, stale data, risk breach и state mismatch.
+- [ ] Подготовить operational/incident runbook и процедуру снятия stop.
 
-- [ ] Heartbeat/health endpoint.
-- [ ] Метрики candle lag, pipeline latency, checkpoint age, exposure, PnL/drawdown.
-- [ ] Alert routing для stale data, DB outage, risk breach и state mismatch.
-- [ ] Автоматический emergency stop и контролируемая процедура снятия.
-- [ ] Runbook запуска, остановки, recovery и incident response.
+**Выход:** 24–72 часа с живым источником, без дублей/пропусков, с доказанным
+автоматическим fail-closed поведением и сохранённым evidence report.
 
-**Выход:** fault-injection подтверждает блокировку новых входов и полный audit trail.
-
-## Milestone M4 — reconciliation и отчётность (P1)
+## Milestone M4 — reconciliation и отчётность
 
 - [ ] Сверять orders, fills, positions, balance/equity и last market event.
 - [ ] Разделить recoverable и fatal mismatches; неоднозначные случаи закрывать fail-closed.
 - [ ] Запускать готовый DDS → MART ETL по расписанию.
 - [ ] Создавать immutable daily report с costs, slippage, drawdown и rejects.
 
-**Выход:** внесённое расхождение обнаруживается до нового входа; replay даёт тот же report.
+## Milestone M5 — paper pilot (минимум 90 дней)
 
-## Milestone M5 — paper pilot (P1, минимум 90 дней)
+- [ ] Зафиксировать strategy/version, universe, capital, risk limits, SLO и владельцев.
+- [ ] Пройти 7-дневный burn-in без изменения стратегии.
+- [ ] Накопить не менее 90 календарных дней и 100 закрытых сделок.
+- [ ] Иметь ноль необъяснённых reconciliation/determinism failures и duplicate orders.
+- [ ] Обеспечить alert/audit trail для каждого критического incident.
+- [ ] Подтвердить положительный net PnL после costs и drawdown в утверждённом limit.
 
-До старта зафиксировать strategy/version, BTCUSDT/ETHUSDT Spot universe, initial
-capital, risk limits, SLO, инфраструктуру и ответственных.
-
-- [ ] 7-дневный наблюдаемый burn-in без изменения стратегии.
-- [ ] Не менее 90 календарных дней и 100 закрытых сделок.
-- [ ] Ноль необъяснённых reconciliation/determinism failures.
-- [ ] Ноль duplicate orders после restart.
-- [ ] Все критические incidents имеют alert и audit trail.
-- [ ] Net PnL положителен после fees/slippage; drawdown в утверждённом limit.
-- [ ] Результат не объясняется одним символом или коротким периодом.
-
-**Выход:** только пакет данных для отдельного live design review, не автоматическое разрешение live.
+Прохождение M5 создаёт пакет для отдельного live design review, но не разрешает live автоматически.
 
 ## Постоянный поток — sealed holdout до 06.02.2027
 
 - [x] Frozen v2 specification и unlock timestamp.
-- [x] Инкрементальный RAW → DDS → derived → health pipeline.
-- [ ] Продолжать загрузку только закрытых BTCUSDT/ETHUSDT 1h candles.
+- [x] Инкрементальный ingestion/health/preflight pipeline.
+- [ ] Продолжать техническую загрузку закрытых BTCUSDT/ETHUSDT 1h candles.
 - [ ] Контролировать gaps, duplicates, provenance, checksums и determinism.
-- [ ] После unlock и проверки sample requirements выполнить ровно один frozen run.
+- [ ] После unlock и sample gate выполнить ровно один frozen run.
 
 До unlock запрещены backtest, PnL, trade attribution и сравнение версий на holdout.
 
-## Явно вне текущего scope
+## Вне текущего scope
 
-- Grid и новые стратегии до завершения оценки pilot candidate.
-- ML/нейросети, futures, margin, leverage, short, HFT и auto-optimization.
-- Live order manager до выполнения M1–M5 и отдельного go/no-go.
+Grid, ML, futures, margin, leverage, short, HFT, auto-optimization и live order manager.

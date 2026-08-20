@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from enum import Enum, auto
+from datetime import UTC, datetime
+from enum import Enum
 from typing import Any
-
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,7 @@ class PaperEventType(str, Enum):
     ORDER_EXECUTED = "paper_order_executed"
     CHECKPOINT_SAVED = "paper_checkpoint_saved"
     RISK_REJECTED = "paper_risk_rejected"
+    DUPLICATE_EVENT_IGNORED = "duplicate_event_ignored"
 
 
 @dataclass
@@ -57,7 +58,7 @@ class PaperMetricsCollector:
     - Providing metrics for dashboards/alerting
     """
 
-    def __init__(self, emit_callback: callable | None = None) -> None:
+    def __init__(self, emit_callback: Callable[[PaperEvent], None] | None = None) -> None:
         """Initialize the metrics collector.
 
         Args:
@@ -99,20 +100,20 @@ class PaperMetricsCollector:
         """Calculate runtime uptime in seconds."""
         if self._runtime_start_time is None:
             return None
-        
-        end_time = self._runtime_stop_time or datetime.now(timezone.utc)
+
+        end_time = self._runtime_stop_time or datetime.now(UTC)
         return (end_time - self._runtime_start_time).total_seconds()
 
     def _emit(self, event: PaperEvent) -> None:
         """Emit an event to callback and store locally."""
         self._events.append(event)
-        
+
         if self._emit_callback is not None:
             try:
                 self._emit_callback(event)
             except Exception as e:
                 logger.error("Failed to emit event %s: %s", event.event_type, e)
-        
+
         # Also log at appropriate level
         self._log_event(event)
 
@@ -138,8 +139,8 @@ class PaperMetricsCollector:
         Args:
             restored_from_checkpoint: Whether runtime was restored from previous state.
         """
-        self._runtime_start_time = datetime.now(timezone.utc)
-        
+        self._runtime_start_time = datetime.now(UTC)
+
         event = PaperEvent(
             event_type=PaperEventType.RUNTIME_STARTED,
             timestamp=self._runtime_start_time,
@@ -159,10 +160,10 @@ class PaperMetricsCollector:
             open_time: Candle open time
         """
         self._candles_processed_count += 1
-        
+
         event = PaperEvent(
             event_type=PaperEventType.CANDLE_PROCESSED,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             sequence=sequence,
             symbol=symbol,
             message=f"Processed candle {sequence} for {symbol}",
@@ -187,7 +188,7 @@ class PaperMetricsCollector:
         """
         event = PaperEvent(
             event_type=PaperEventType.STATE_RESTORED,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             sequence=last_sequence,
             message=f"State restored from sequence {last_sequence}",
             metadata={
@@ -212,10 +213,10 @@ class PaperMetricsCollector:
             symbol: Symbol if available
         """
         self._errors_count += 1
-        
+
         event = PaperEvent(
             event_type=PaperEventType.EXECUTION_ERROR,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             sequence=sequence,
             symbol=symbol,
             message=f"Execution error: {error}",
@@ -232,8 +233,8 @@ class PaperMetricsCollector:
         Args:
             reason: Optional reason for stopping
         """
-        self._runtime_stop_time = datetime.now(timezone.utc)
-        
+        self._runtime_stop_time = datetime.now(UTC)
+
         event = PaperEvent(
             event_type=PaperEventType.RUNTIME_STOPPED,
             timestamp=self._runtime_stop_time,
@@ -264,10 +265,10 @@ class PaperMetricsCollector:
             price: Execution price
         """
         self._orders_executed_count += 1
-        
+
         event = PaperEvent(
             event_type=PaperEventType.ORDER_EXECUTED,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             sequence=sequence,
             symbol=symbol,
             message=f"Executed {side} {quantity} {symbol} @ {price}",
@@ -286,10 +287,10 @@ class PaperMetricsCollector:
             sequence: Sequence number at checkpoint
         """
         self._checkpoints_saved_count += 1
-        
+
         event = PaperEvent(
             event_type=PaperEventType.CHECKPOINT_SAVED,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             sequence=sequence,
             message=f"Checkpoint saved at sequence {sequence}",
             metadata={
@@ -297,6 +298,18 @@ class PaperMetricsCollector:
             },
         )
         self._emit(event)
+
+    def emit_duplicate_event_ignored(self, sequence: int) -> None:
+        """Record a replay rejected by the durable sequence guard."""
+        self._emit(
+            PaperEvent(
+                event_type=PaperEventType.DUPLICATE_EVENT_IGNORED,
+                timestamp=datetime.now(UTC),
+                sequence=sequence,
+                message=f"Duplicate market event {sequence} ignored",
+                metadata={"sequence": sequence},
+            )
+        )
 
     def emit_risk_rejected(
         self,
@@ -313,7 +326,7 @@ class PaperMetricsCollector:
         """
         event = PaperEvent(
             event_type=PaperEventType.RISK_REJECTED,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             sequence=sequence,
             symbol=symbol,
             message=f"Order rejected by risk: {reason}",

@@ -1,13 +1,13 @@
 # План развития Crypto Trading System
 
-> Документ синхронизирован 19.08.2026. Детальный оперативный план находится в
+> Документ синхронизирован 20.08.2026. Детальный оперативный план находится в
 > [`DEVELOPMENT_PLAN_2026-08-19.md`](DEVELOPMENT_PLAN_2026-08-19.md), а компактная
 > последовательность milestones — в [`ROADMAP.md`](ROADMAP.md).
 
 ## Цель текущего цикла
 
-Собрать реализованные data, strategy, risk, paper execution, persistence,
-monitoring и reporting компоненты в единый воспроизводимый **paper application**.
+Доказать эксплуатационную готовность собранного **paper application**: подключить
+непрерывный источник, встроить watchdog/emergency stop, провести soak и добавить reconciliation.
 До прохождения paper acceptance gates live trading остаётся запрещённым.
 
 ## Что уже построено
@@ -17,36 +17,37 @@ monitoring и reporting компоненты в единый воспроизв�
 2. **Исследование:** backtest с N → N+1 execution, costs, portfolio, audit trail и
    walk-forward foundation.
 3. **Стратегии и risk:** Trend DCA, Breakout Retest, frozen v2 и Risk Engine.
-4. **Paper foundation:** market feed, fill simulation, execution runtime,
-   PostgreSQL persistence/recovery, metrics, PnL и persistent PnL snapshots.
+4. **Paper application:** composition root/CLI, preflight, restore, warmup,
+   managed pipeline, fill simulation, PostgreSQL persistence, PnL и shutdown checkpoint.
 5. **Эксплуатационная база:** Python 3.12 CI, PostgreSQL 17 integration и единый
    checksum-protected migration runner.
 6. **Independent validation:** sealed holdout pipeline с запретом performance до
    `2027-02-06T00:00:00Z` и выполнения sample requirements.
 
-Наличие компонентов не равно готовности к пилоту: пока нет application lifecycle,
-полного reconciliation, alert routing и доказанного restart E2E.
+Restart/idempotency E2E реализован для sequence, order/fill и PnL restore. Наличие
+компонентов всё равно не равно готовности к пилоту: production builder пока использует
+пустой конечный event source, нет runtime wiring всех health triggers, внешнего alert
+routing, полного reconciliation и фактического 24–72-часового soak.
 
 ## Приоритеты
 
-### P0. Paper composition и lifecycle
+### P0. Long-running paper validation
 
-- composition root/CLI;
-- preflight, schema compatibility, restore, warmup;
-- closed-candle processing через Strategy → Risk → Execution;
-- durable checkpoints и graceful shutdown;
-- fail-closed отказ при live mode и критической зависимости.
+- подключить long-running closed-candle source к готовому composition root;
+- встроить monitors и emergency stop в runtime loop;
+- выполнить smoke, fault-injection и 24–72-часовой soak;
+- подтвердить graceful restart, monotonic sequence и отсутствие дублей.
 
 ### P0. Idempotency и recovery
 
-- restart E2E на границах signal/order/fill/PnL/checkpoint;
-- deterministic replay;
-- correlation identifiers и запрет duplicate orders.
+- [x] restart E2E для sequence/order/fill/PnL/checkpoint;
+- [x] deterministic client order identity и duplicate-order protection;
+- [ ] единые operational `run_id`/`signal_id` и стендовый restart во время soak.
 
 ### P1. Observability и reconciliation
 
-- heartbeat, lag/latency/checkpoint/risk/PnL metrics;
-- alerts и emergency stop;
+- [x] durable heartbeat, health monitors, soak metrics/report и emergency-stop primitive;
+- [ ] automatic triggers, external alerts и freshness watchdog;
 - сверка orders/fills/positions/equity/last event;
 - runbook и fault-injection.
 
