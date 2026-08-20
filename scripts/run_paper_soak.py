@@ -79,6 +79,20 @@ def record_risk_status(risk: RiskHealthResult, metrics: SoakMetrics) -> None:
         print(f"risk_warning={','.join(risk.reasons)}", flush=True)
 
 
+def completed_runtime_error(task: asyncio.Task[None]) -> BaseException | None:
+    """Return the failure of a completed runtime task, if it actually failed.
+
+    ``PaperMarketData`` is a finite async source in smoke and validation
+    environments.  Exhausting that source completes ``run_async`` normally and
+    must not be confused with a crashed or unexpectedly cancelled task.
+    """
+    if not task.done():
+        return None
+    if task.cancelled():
+        return RuntimeError("paper runtime task was cancelled")
+    return task.exception()
+
+
 async def run_soak(args: argparse.Namespace) -> SoakSession:
     start, end = validate_args(args)
     mode = os.getenv("TRADING_MODE", "paper").lower()
@@ -111,15 +125,20 @@ async def run_soak(args: argparse.Namespace) -> SoakSession:
             metrics.record_lifecycle(state.name, datetime.now(UTC))
         pipeline_monitor = PipelineHealthMonitor()
         risk_monitor = RiskHealthMonitor()
+        event_source_exhausted = False
         while datetime.now(UTC) < end:
             if stop_requested.is_set():
                 session.finish(SoakStatus.ABORTED, "termination signal received")
                 break
             run_task = application._run_task
             if run_task is not None and run_task.done():
-                error = run_task.exception()
-                detail = error or "event stream ended"
-                raise RuntimeError(f"paper runtime stopped unexpectedly: {detail}")
+                error = completed_runtime_error(run_task)
+                if error is not None:
+                    raise RuntimeError(f"paper runtime stopped unexpectedly: {error}")
+                if not event_source_exhausted:
+                    event_source_exhausted = True
+                    metrics.increment("event_source_exhausted")
+                    print("event_source_exhausted", flush=True)
             if dependencies.heartbeat is not None:
                 heartbeat = await dependencies.heartbeat.beat(
                     state="RUNNING", sequence=dependencies.runtime.last_checkpoint_sequence
