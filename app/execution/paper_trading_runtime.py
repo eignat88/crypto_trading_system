@@ -10,7 +10,6 @@ from typing import Any, Protocol
 import structlog
 
 from app.exchange.paper_execution_engine import ExecutionRequest, OrderSide, PaperExecutionEngine
-from app.exchange.paper_market_data import PaperMarketData
 from app.exchange.paper_state_repository import PaperStateRepository
 from app.models.candle import Candle
 from app.models.market_event import MarketEvent
@@ -25,7 +24,11 @@ event_logger = structlog.get_logger()
 class StrategyProtocol(Protocol):
     """Protocol for trading strategies."""
 
-    async def on_candle(self, candle: Candle, engine: PaperExecutionEngine) -> list[ExecutionRequest]:
+    async def on_candle(
+        self,
+        candle: Candle,
+        engine: PaperExecutionEngine,
+    ) -> list[ExecutionRequest]:
         """Process candle and return execution requests."""
         ...
 
@@ -33,7 +36,11 @@ class StrategyProtocol(Protocol):
 class RiskManagerProtocol(Protocol):
     """Protocol for risk management."""
 
-    async def validate_request(self, request: ExecutionRequest, engine: PaperExecutionEngine) -> bool:
+    async def validate_request(
+        self,
+        request: ExecutionRequest,
+        engine: PaperExecutionEngine,
+    ) -> bool:
         """Validate execution request against risk limits."""
         ...
 
@@ -198,7 +205,10 @@ class PaperTradingRuntime:
                 for request_index, request in enumerate(requests):
                     # Validate through risk manager
                     if self.risk_manager is not None:
-                        if not await self.risk_manager.validate_request(request, self.execution_engine):
+                        if not await self.risk_manager.validate_request(
+                            request,
+                            self.execution_engine,
+                        ):
                             logger.warning("Risk validation failed for request: %s", request)
 
                             # Emit metrics event
@@ -237,13 +247,21 @@ class PaperTradingRuntime:
                     except Exception as e:
                         logger.error("Execution failed: %s", e)
                         if self.metrics_collector is not None:
-                            self.metrics_collector.emit_execution_error(e, sequence=sequence, symbol=request.symbol)
+                            self.metrics_collector.emit_execution_error(
+                                e,
+                                sequence=sequence,
+                                symbol=request.symbol,
+                            )
                         raise
 
             except Exception as e:
                 logger.error("Strategy error: %s", e)
                 if self.metrics_collector is not None:
-                    self.metrics_collector.emit_execution_error(e, sequence=sequence, symbol=candle.symbol)
+                    self.metrics_collector.emit_execution_error(
+                        e,
+                        sequence=sequence,
+                        symbol=candle.symbol,
+                    )
                 raise
 
         self._candles_processed += 1
@@ -285,7 +303,6 @@ class PaperTradingRuntime:
         logger.info("PaperTradingRuntime starting...")
 
         # Emit runtime started metric
-        restored = False
         if self.metrics_collector is not None:
             self.metrics_collector.emit_runtime_started(restored_from_checkpoint=False)
 
@@ -294,7 +311,6 @@ class PaperTradingRuntime:
             restored_state = await self.restore_state() if restore_on_start else None
 
             if restored_state is not None:
-                restored = True
                 logger.info(
                     "State restored: last_sequence=%d, last_timestamp=%s",
                     restored_state.last_market_sequence,
@@ -326,9 +342,17 @@ class PaperTradingRuntime:
 
             # Emit runtime stopped metric
             if self.metrics_collector is not None:
-                self.metrics_collector.emit_runtime_stopped(reason="normal shutdown" if not self._shutdown_event.is_set() else "user requested")
+                reason = (
+                    "normal shutdown"
+                    if not self._shutdown_event.is_set()
+                    else "user requested"
+                )
+                self.metrics_collector.emit_runtime_stopped(reason=reason)
 
-            logger.info("PaperTradingRuntime stopped. Candles processed: %d", self._candles_processed)
+            logger.info(
+                "PaperTradingRuntime stopped. Candles processed: %d",
+                self._candles_processed,
+            )
 
     async def _market_event_stream(self) -> AsyncIterator[MarketEvent]:
         """Stream market events from PaperMarketData.
@@ -382,7 +406,11 @@ class DefaultRiskManager:
         self.max_position_size = max_position_size
         self.max_order_value = max_order_value
 
-    async def validate_request(self, request: ExecutionRequest, engine: PaperExecutionEngine) -> bool:
+    async def validate_request(
+        self,
+        request: ExecutionRequest,
+        engine: PaperExecutionEngine,
+    ) -> bool:
         """Validate execution request."""
         if self.max_order_value is not None:
             price = engine.last_candle.close if engine.last_candle else Decimal("0")
