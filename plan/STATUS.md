@@ -21,7 +21,7 @@ independent holdout `Breakout Retest v2`. Holdout BTCUSDT/ETHUSDT 1h накап�
 | Миграции | ✅ Готово | Канонический каталог, checksum journal, repeat-safe runner | Проверять upgrade path при новых DDL |
 | Backtest/walk-forward | ✅ Ядро готово | N → N+1, costs, portfolio, audit trail | Утвердить pilot strategy |
 | Sealed holdout | 🚧 Накопление | Fail-closed update, health и preflight | Не открывать performance до unlock gate |
-| Paper execution | 🚧 Компоненты готовы | Feed, fills, execution, persistence, recovery, PnL snapshots | Composition root и restart E2E |
+| Paper execution | ✅ Composition root готов | Preflight, restore, RiskEngine, warmup, lifecycle, checkpoint и signal shutdown | Подключить long-running feed и провести restart E2E на PostgreSQL |
 | Monitoring/reconciliation | 🚧 Частично | Метрики и reporting-компоненты | Alerts, heartbeat, emergency stop, reconciliation |
 | Live execution | ⛔ Запрещено | Реального order manager нет | Только отдельный go/no-go после paper gates |
 
@@ -39,9 +39,9 @@ independent holdout `Breakout Retest v2`. Holdout BTCUSDT/ETHUSDT 1h накап�
 
 ## Ближайшие задачи
 
-1. Создать composition root/CLI для paper runtime: preflight → restore → warmup →
-   closed-candle loop → checkpoint → graceful shutdown.
-2. Добавить restart/idempotency E2E вокруг signal, order, fill и PnL snapshot.
+1. Подключить long-running closed-candle feed к готовому composition root и провести
+   24-часовой soak.
+2. Расширить restart/idempotency E2E вокруг signal, order, fill и PnL snapshot на PostgreSQL.
 3. Подключить market pipeline и MART ETL к управляемому расписанию с общей границей
    `as_of` и запретом незакрытых свечей.
 4. Реализовать heartbeat, alert routing и fail-closed emergency stop.
