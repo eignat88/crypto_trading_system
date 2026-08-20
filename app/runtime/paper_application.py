@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import signal
+from contextlib import suppress
 
 import structlog
 
@@ -21,6 +22,16 @@ class PaperApplication:
         self._run_task: asyncio.Task[None] | None = None
         self._stop_lock = asyncio.Lock()
         self._logger = structlog.get_logger()
+        self._session_close_task: asyncio.Task[None] | None = None
+
+    async def _stop_at_session_close(self, delay: float) -> None:
+        await asyncio.sleep(delay)
+        self._logger.info(
+            "scheduled_session_close", session_id=self.dependencies.runtime.session_id
+        )
+        self.trading_enabled = False
+        self.dependencies.runtime.trading_enabled = False
+        self.dependencies.runtime.stop()
 
     async def start(self) -> None:
         if self.lifecycle.state is not RuntimeState.CREATED:
@@ -65,13 +76,22 @@ class PaperApplication:
         }
         missing = set(self.dependencies.symbols) - set(available)
         insufficient.update({symbol: 0 for symbol in missing})
-        self.trading_enabled = not insufficient
+        session = (
+            self.dependencies.session_manager.open()
+            if self.dependencies.session_manager is not None
+            else None
+        )
+        inside_window = self.dependencies.session_manager is None or session is not None
+        self.trading_enabled = not insufficient and inside_window
         self.dependencies.runtime.trading_enabled = self.trading_enabled
+        self.dependencies.runtime.session_id = session.session_id if session is not None else None
         self._logger.info(
             "market_warmup_completed",
             trading_enabled=self.trading_enabled,
             required=self.dependencies.warmup_candles,
             insufficient=insufficient,
+            inside_trading_window=inside_window,
+            session_id=self.dependencies.runtime.session_id,
         )
         self.lifecycle.transition(RuntimeState.RUNNING)
         self._run_task = asyncio.create_task(
@@ -79,6 +99,12 @@ class PaperApplication:
             name="paper-trading-runtime",
         )
         self._logger.info("paper_runtime_started", trading_enabled=self.trading_enabled)
+        if self.dependencies.session_manager is not None:
+            close_delay = self.dependencies.session_manager.seconds_until_close()
+            if close_delay is not None:
+                self._session_close_task = asyncio.create_task(
+                    self._stop_at_session_close(close_delay), name="scheduled-session-close"
+                )
         if self.dependencies.heartbeat is not None:
             await self.dependencies.heartbeat.beat(
                 state="RUNNING",
@@ -101,12 +127,18 @@ class PaperApplication:
             self.trading_enabled = False
             self.dependencies.runtime.trading_enabled = False
             self.dependencies.runtime.stop()
+            if self._session_close_task is not None:
+                self._session_close_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._session_close_task
             if self._run_task is not None:
                 await self._run_task
             else:
                 await self.dependencies.runtime.checkpoint()
             if self.dependencies.pnl_checkpoint is not None:
                 await self.dependencies.pnl_checkpoint()
+            if self.dependencies.session_manager is not None:
+                self.dependencies.session_manager.close()
             self.lifecycle.transition(RuntimeState.STOPPED)
             if self.dependencies.heartbeat is not None:
                 await self.dependencies.heartbeat.beat(
