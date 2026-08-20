@@ -6,6 +6,8 @@ from app.monitoring.market_health import MarketHealthMonitor
 from app.monitoring.notifier import ConsoleNotifier, Notification, NotificationLevel, Notifier
 from app.monitoring.pipeline_health import PipelineHealthMonitor
 from app.monitoring.risk_health import RiskHealthMonitor
+from app.monitoring.soak_metrics import PnlSnapshot, RiskSnapshot, SoakMetrics
+from app.monitoring.soak_session import SoakSession, SoakStatus
 
 __all__ = [
     "ConsoleNotifier",
@@ -18,4 +20,9 @@ __all__ = [
     "PipelineHealthMonitor",
     "RiskHealthMonitor",
     "RuntimeHealth",
+    "PnlSnapshot",
+    "RiskSnapshot",
+    "SoakMetrics",
+    "SoakSession",
+    "SoakStatus",
 ]
