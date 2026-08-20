@@ -32,6 +32,8 @@ independent holdout `Breakout Retest v2`. Holdout BTCUSDT/ETHUSDT 1h накап�
   записываются в `public.schema_migrations`.
 - `MarketDataPipeline` объединяет RAW → DDS и инкрементальный расчёт
   indicators/regime; его библиотечная композиция готова, операционный scheduler — нет.
+- Managed pipeline integration suite подтверждает полный closed-candle flow, durable
+  restart с восстановлением sequence/position/PnL и запрет стратегии до EMA200 warmup.
 - DDS → MART ETL реализует идемпотентное заполнение `daily_performance`,
   `trade_statistics`, `drawdown_history` и `monthly_returns`.
 - Paper persistence включает orders, fills, positions, runtime/recovery state и PnL

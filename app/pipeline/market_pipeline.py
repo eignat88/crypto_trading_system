@@ -101,6 +101,10 @@ class MarketPipeline:
                 candle = await self._call(self.dds_transformer, "normalize", event)
                 candle.validate()
                 stages.append("DDS")
+                # The paper engine must advance on every accepted candle, not only
+                # on candles that produce a signal, so its durable sequence remains
+                # the authoritative restart checkpoint.
+                await self._call_optional(self.execution_engine, "on_market_event", event)
                 indicators = await self._call(self.indicator_service, "calculate", candle)
                 stages.append("INDICATORS")
                 regime = await self._call(self.regime_service, "detect", candle, indicators)
@@ -201,6 +205,14 @@ class MarketPipeline:
         if target is None:
             raise RuntimeError(f"pipeline dependency for {method} is not configured")
         result = getattr(target, method)(*args, **kwargs)
+        return await result if inspect.isawaitable(result) else result
+
+    @staticmethod
+    async def _call_optional(target: Any, method: str, *args: Any) -> Any:
+        callback = getattr(target, method, None)
+        if callback is None:
+            return None
+        result = callback(*args)
         return await result if inspect.isawaitable(result) else result
 
     async def _risk_event(self, event: MarketEvent, reason: str, detail: Any) -> None:
