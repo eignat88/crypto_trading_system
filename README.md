@@ -246,6 +246,19 @@ Signal
 Risk Engine
 ```
 
+# Managed market pipeline
+
+Paper trading consumes **closed UTC candles** through one managed path:
+
+`Exchange → RAW → DDS → EMA/RSI/ATR → regime → strategy → RiskEngine → paper execution → checkpoint`
+
+Construct `MarketPipeline` with adapters for each existing service and call only
+`process_market_event(event)`.  It starts in `STARTING`, remains in `WARMUP` until
+every configured symbol has at least 200 candles plus EMA, RSI, ATR and a regime,
+then enters `READY`. `DEGRADED` fails closed and `STOPPED` is terminal. Duplicate
+or restored sequences are ignored before signal generation. MART refresh is
+scheduled as a background task rather than extending the market-event critical path.
+
 ## License
 
 MIT

@@ -1,6 +1,6 @@
 # Роадмэп Crypto Trading System
 
-**Срез:** 19.08.2026.
+**Срез:** 20.08.2026.
 **Источник текущих приоритетов:** [`DEVELOPMENT_PLAN_2026-08-19.md`](DEVELOPMENT_PLAN_2026-08-19.md).
 **Текущий milestone:** воспроизводимый fail-closed paper runtime. Live trading заблокирован.
 
@@ -24,7 +24,7 @@
 - [x] Выполнять startup preflight и проверку версии схемы.
 - [x] Восстанавливать runtime, risk, orders, fills, positions и PnL state.
 - [x] Делать warmup до разрешения торговли.
-- [ ] Подключить `MarketDataPipeline` с единой границей `as_of`.
+- [x] Подключить managed `MarketPipeline` с closed-candle gate, readiness и checkpoint.
 - [x] Гарантировать graceful shutdown и durable checkpoint.
 - [x] Безопасно отклонять live mode.
 
