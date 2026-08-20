@@ -127,8 +127,10 @@ class PaperStateRepositoryPostgres(PaperStateRepository):
     async def save_order(self, order: PaperOrderState) -> None:
         await self._connection.execute(
             """
-            INSERT INTO paper_orders(order_id, symbol, side, quantity, status, created_at)
-            VALUES($1,$2,$3,$4,$5,$6)
+            INSERT INTO paper_orders(
+                order_id, symbol, side, quantity, status, created_at, client_order_id
+            )
+            VALUES($1,$2,$3,$4,$5,$6,$7)
             ON CONFLICT(order_id) DO UPDATE SET status=EXCLUDED.status
             """,
             order.order_id,
@@ -137,6 +139,7 @@ class PaperStateRepositoryPostgres(PaperStateRepository):
             order.quantity,
             order.status,
             order.created_at,
+            order.client_order_id,
         )
 
     async def load_orders(self) -> list[PaperOrderState]:
