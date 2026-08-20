@@ -1,12 +1,14 @@
-# План разработки Crypto Trading System на 19.08.2026
+# План разработки Crypto Trading System
+
+**Первичный аудит:** 19.08.2026. **Последняя актуализация:** 20.08.2026.
 
 ## 1. Резюме
 
-Система уже имеет рабочее исследовательское ядро и значительную часть paper-контура,
-но пока не готова ни к длительному paper-запуску, ни тем более к live trading.
-Главная задача ближайшего цикла — не добавлять новые стратегии, а превратить
-существующие разрозненные компоненты в один воспроизводимый, наблюдаемый и
-fail-closed paper runtime.
+Система имеет рабочее исследовательское ядро и собранный paper composition root,
+но пока не готова к длительному paper pilot и тем более к live trading. Главная
+задача цикла — подключить живой long-running источник к единственному runtime,
+замкнуть health monitors на emergency stop/reconciliation и доказать поведение
+24–72-часовым soak, а не добавлять стратегии.
 
 Параллельно необходимо продолжать **только техническое** накопление sealed holdout
 `Breakout Retest v2`. Просмотр performance-метрик этой выборки запрещён до
@@ -32,17 +34,24 @@ fail-closed paper runtime.
 - Персистентные paper PnL snapshots вместе с orders, fills, positions и runtime
   state.
 - CI с Ruff, unit-тестами и отдельной PostgreSQL 17 integration job.
+- Paper CLI/composition root: fail-closed preflight, migration check, restore,
+  warmup, managed closed-candle pipeline, checkpoint и graceful shutdown.
+- PostgreSQL restart/idempotency E2E для sequence, order/fill, позиции и PnL;
+  детерминированный `client_order_id` предотвращает повторный ордер.
+- Persistent heartbeat, health monitors, notifier abstraction, emergency-stop
+  coordinator, bounded soak runner и JSON evidence report.
 
 ### Реализовано частично или не интегрировано
 
-1. `app/main.py` проверяет БД, но не собирает и не запускает paper runtime.
-2. Общий market pipeline реализован как библиотечная композиция, но ещё не
-   подключён к расписанию/основному runnable-приложению.
+1. Штатный entry point — `scripts/run_paper.py`, но production dependency builder
+   пока создаёт конечный пустой `PaperMarketData`; live subscription не подключена.
+2. Managed market pipeline подключён и протестирован, но его длительный запуск с
+   реальным источником и целевой PostgreSQL ещё не доказан.
 3. DDS → MART ETL реализован и протестирован, однако production-расписание и
    immutable daily-report delivery ещё не настроены.
-4. Paper monitoring и reporting реализованы как библиотечные компоненты, но нет
-   операционного процесса: health endpoint/heartbeat, alert routing, runbook и
-   автоматический аварийный останов.
+4. Heartbeat, health monitors, console notifier и emergency stop реализованы как
+   primitives. Нет полного runtime wiring, внешнего alert routing/watchdog,
+   operational runbook и fault-injection evidence.
 5. Нет exchange reconciliation и live order manager. Live режим должен оставаться
    запрещённым.
 6. Полный lint debt и целевой PostgreSQL pilot остаются отдельными gates.
@@ -97,31 +106,43 @@ fail-closed paper runtime.
 **Критерий выхода:** одна команда создаёт полную схему на пустой БД и безопасно
 повторяется; runtime не стартует при несовместимой версии схемы.
 
-### P0 — собрать runnable paper application (19–26 августа)
+### P0 — runnable paper application (код выполнен; стендовый gate открыт)
 
-- Добавить явный composition root/CLI для `PaperMarketData`, стратегии,
+- [x] Добавить явный composition root/CLI для `PaperMarketData`, стратегии,
   `RiskEngine`, `PaperExecutionEngine`, repositories, metrics и PnL tracker.
-- Реализовать lifecycle: startup preflight → restore → reconcile local state →
+- [x] Реализовать lifecycle: startup preflight → restore local state →
   warmup → consume closed candles → checkpoint → graceful shutdown.
-- Гарантировать идемпотентность candle/event/order processing после рестарта.
-- Подключить реализованный pipeline RAW → DDS → indicators/regime к composition
+- [x] Гарантировать идемпотентность sequence/order processing после рестарта.
+- [x] Подключить реализованный pipeline RAW → DDS → indicators/regime к composition
   root с общей
   границей `as_of` и запретом обработки незакрытой свечи.
-- Добавить end-to-end тест restart в точках до/после signal, order и fill.
+- [x] Добавить PostgreSQL E2E restart для runtime/checkpoint/order/fill/PnL restore.
+- [ ] Подключить long-running event source и выполнить управляемый restart в soak.
 
 **Критерий выхода:** 24-часовой локальный/стендовый soak проходит без дублей,
 расхождений позиции и пропущенных закрытых свечей; live mode продолжает завершаться
 безопасным отказом.
 
-### P1 — наблюдаемость и аварийное управление (26–29 августа)
+### P0 — стендовый soak и эксплуатационная безопасность
 
-- Определить обязательные метрики: heartbeat, candle lag, last closed candle,
+- [x] Добавить bounded soak CLI, session model, heartbeat samples, lifecycle
+  evidence и JSON report.
+- [ ] Подключить живые closed-candle events: завершение пустого источника не должно
+  ошибочно считаться доказательством успешного soak.
+- [ ] Сначала выполнить короткий smoke, затем 24–72 часа; во время прогона сделать restart.
+- [ ] Проверить market throughput/gaps, monotonic sequence, checkpoint freshness,
+  duplicate orders, позиции, PnL и сохранность evidence.
+
+### P1 — наблюдаемость и аварийное управление
+
+- [x] Определить и реализовать foundation метрик: heartbeat, candle lag,
   pipeline latency, rejected signals, orders/fills, exposure, PnL/drawdown,
   checkpoint age и recovery/reconciliation failures.
-- Добавить structured event correlation (`run_id`, `signal_id`, `client_order_id`).
-- Реализовать alerts и fail-closed emergency stop при stale data, DB outage,
+- [ ] Добавить structured event correlation (`run_id`, `signal_id`, `client_order_id`).
+- [x] Реализовать notifier interface и идемпотентный emergency-stop coordinator.
+- [ ] Связать alerts и fail-closed emergency stop срабатывающими при stale data, DB outage,
   превышении risk limits и state mismatch.
-- Подготовить runbook запуска, остановки, восстановления и расследования инцидента.
+- [ ] Подготовить runbook запуска, остановки, восстановления и расследования инцидента.
 
 **Критерий выхода:** fault-injection тесты подтверждают, что каждый критический
 сбой блокирует новые входы, сохраняет диагностический след и допускает безопасное
@@ -178,13 +199,14 @@ fail-closed paper runtime.
 |---:|---|---|---|
 | 1 | Baseline и hygiene | — | Достоверная зелёная точка отсчёта |
 | 2 | Единые миграции | 1 | Воспроизводимая PostgreSQL schema |
-| 3 | Paper composition/lifecycle | 1, 2 | Запускаемое paper-приложение |
-| 4 | Restart/idempotency E2E | 3 | Безопасное восстановление |
-| 5 | Monitoring/emergency stop | 3 | Fail-closed эксплуатация |
-| 6 | Reconciliation | 4, 5 | Доказуемая согласованность состояния |
-| 7 | MART/daily report | 2, 3 | Операционная отчётность |
-| 8 | 90-дневный paper pilot | 4–7 | Данные для решения о следующей фазе |
-| 9 | Live design review | 8 | Отдельный go/no-go, без автозапуска |
+| 3 | Paper composition/lifecycle | 1, 2 | Выполнено в коде |
+| 4 | Restart/idempotency E2E | 3 | Выполнен тестовый baseline |
+| 5 | Long-running source и soak | 3, 4 | Стендовое evidence |
+| 6 | Monitoring wiring/emergency stop | 5 | Fail-closed эксплуатация |
+| 7 | Reconciliation | 4–6 | Доказуемая согласованность состояния |
+| 8 | MART/daily report | 2, 3 | Операционная отчётность |
+| 9 | 90-дневный paper pilot | 4–8 | Данные для решения о следующей фазе |
+| 10 | Live design review | 9 | Отдельный go/no-go, без автозапуска |
 
 ## 6. Definition of Done для каждой задачи
 
