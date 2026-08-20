@@ -89,7 +89,12 @@ class PaperApplication:
             else None
         )
         inside_window = self.dependencies.session_manager is None or session is not None
-        self.trading_enabled = bootstrap_ok and not insufficient and inside_window
+        market_data_ready = bool(
+            getattr(self.dependencies.runtime.market_data, "ready", True)
+        )
+        self.trading_enabled = (
+            bootstrap_ok and market_data_ready and not insufficient and inside_window
+        )
         self.dependencies.runtime.trading_enabled = self.trading_enabled
         self.dependencies.runtime.session_id = session.session_id if session is not None else None
         self._logger.info(
@@ -97,6 +102,7 @@ class PaperApplication:
             trading_enabled=self.trading_enabled,
             required=self.dependencies.warmup_candles,
             insufficient=insufficient,
+            market_data_ready=market_data_ready,
             inside_trading_window=inside_window,
             session_id=self.dependencies.runtime.session_id,
         )

@@ -5,7 +5,7 @@ import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 import structlog
 
@@ -97,6 +97,11 @@ class PaperTradingRuntime:
         return self._last_checkpoint_sequence
 
     @property
+    def last_processed_sequence(self) -> int:
+        """Last event accepted by the execution engine, durable or not yet flushed."""
+        return cast(int, self.execution_engine.last_sequence)
+
+    @property
     def start_time(self) -> datetime | None:
         return self._start_time
 
@@ -121,6 +126,13 @@ class PaperTradingRuntime:
                 )
                 # Restore execution engine state
                 await self.execution_engine.restore_state()
+                self._last_checkpoint_sequence = state.last_market_sequence
+                restore_boundary = getattr(self.market_data, "restore_boundary", None)
+                if restore_boundary is not None:
+                    restore_boundary(
+                        state.last_market_sequence,
+                        state.last_processed_timestamp,
+                    )
                 event_logger.info(
                     "state_restored", sequence=state.last_market_sequence
                 )
@@ -194,7 +206,9 @@ class PaperTradingRuntime:
         logger.debug("Processing candle: sequence=%d, time=%s", sequence, candle.open_time)
 
         # Update execution engine with market data
-        self.execution_engine.on_market_event(event)
+        if not self.execution_engine.on_market_event(event):
+            event_logger.info("duplicate_event_ignored", sequence=sequence)
+            return
 
         # Run strategy if configured
         source_ready = getattr(self.market_data, "ready", True)

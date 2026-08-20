@@ -35,6 +35,9 @@ composition root», а **стендовая валидация непрерыв�
    market throughput, restart и отсутствие дублей: это проверяется по отчёту и БД.
 4. Console notifier не является внешним alert routing.
 5. Reconciliation orders/fills/positions/equity/last event отсутствует; live запрещён.
+6. Предыдущие короткие `restart_before`/`restart_after` с sequence=0 не являются
+   доказательством отказа: restart/idempotency остаётся проверить на событии X с
+   ненулевым durable checkpoint. Реализовано, требуется проверка.
 
 ## Следующие задачи по порядку
 

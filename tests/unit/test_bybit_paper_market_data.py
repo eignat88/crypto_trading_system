@@ -44,6 +44,10 @@ def test_bootstrap_accepts_complete_fresh_closed_history() -> None:
 
     assert asyncio.run(source.bootstrap()) == {"BTCUSDT": 250, "ETHUSDT": 250}
     assert source.ready is True
+    assert source._last_emitted == {
+        "BTCUSDT": boundary - timedelta(hours=1),
+        "ETHUSDT": boundary - timedelta(hours=1),
+    }
 
 
 def test_latest_boundary_excludes_open_hour() -> None:
@@ -51,3 +55,23 @@ def test_latest_boundary_excludes_open_hour() -> None:
     assert BybitPaperMarketData._latest_closed_boundary(now) == datetime(
         2026, 8, 20, 17, tzinfo=UTC
     )
+
+
+def test_restore_boundary_skips_only_durably_processed_symbol_events() -> None:
+    source = BybitPaperMarketData(
+        connection=FakeConnection([]),  # type: ignore[arg-type]
+        collector=NoBackfillCollector(),  # type: ignore[arg-type]
+        symbols=["BTCUSDT", "ETHUSDT"],
+        interval="1h",
+        warmup_candles=200,
+        backfill_buffer=50,
+        poll_seconds=60,
+        stale_grace_seconds=600,
+    )
+    opened = datetime(2026, 8, 20, 17, tzinfo=UTC)
+    btc_sequence = int(opened.timestamp()) * 10
+
+    source.restore_boundary(btc_sequence, opened)
+
+    assert source._last_emitted["BTCUSDT"] == opened
+    assert source._last_emitted["ETHUSDT"] == opened - timedelta(hours=1)

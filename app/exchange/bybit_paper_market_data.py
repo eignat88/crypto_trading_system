@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import cast
 
 import asyncpg  # type: ignore[import-untyped]
 import structlog
@@ -51,9 +52,19 @@ class BybitPaperMarketData:
     def stop(self) -> None:
         self._stopped.set()
 
+    def restore_boundary(self, sequence: int, timestamp: datetime | None) -> None:
+        """Restore per-symbol emission boundaries from durable runtime state."""
+        if timestamp is None or sequence <= 0:
+            return
+        for index, symbol in enumerate(self.symbols):
+            symbol_sequence = int(timestamp.timestamp()) * 10 + index
+            self._last_emitted[symbol] = (
+                timestamp if symbol_sequence <= sequence else timestamp - self.duration
+            )
+
     @staticmethod
     def _latest_closed_boundary(now: datetime) -> datetime:
-        return align_to_interval(now, timedelta(hours=1))
+        return cast(datetime, align_to_interval(now, timedelta(hours=1)))
 
     async def _stats(self) -> dict[str, asyncpg.Record]:
         rows = await self.connection.fetch(
@@ -127,6 +138,13 @@ class BybitPaperMarketData:
 
         stats = await self._stats()
         counts = {symbol: int(row["candle_count"]) for symbol, row in stats.items()}
+        # On the first process start DDS history is warmup, not a stream backlog.
+        # A restored durable boundary takes precedence because the mapping is
+        # already populated by ``restore_boundary`` before bootstrap.
+        if not self._last_emitted:
+            self._last_emitted = {
+                symbol: row["last_candle"] for symbol, row in stats.items()
+            }
         self.ready = all(
             symbol in stats
             and counts[symbol] >= self.warmup_candles

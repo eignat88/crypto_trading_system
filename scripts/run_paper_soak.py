@@ -139,9 +139,10 @@ async def run_soak(args: argparse.Namespace) -> SoakSession:
                     event_source_exhausted = True
                     metrics.increment("event_source_exhausted")
                     print("event_source_exhausted", flush=True)
+            metrics.record_runtime_progress(dependencies.runtime.candles_processed)
             if dependencies.heartbeat is not None:
                 heartbeat = await dependencies.heartbeat.beat(
-                    state="RUNNING", sequence=dependencies.runtime.last_checkpoint_sequence
+                    state="RUNNING", sequence=dependencies.runtime.last_processed_sequence
                 )
                 metrics.record_heartbeat(heartbeat)
                 print("heartbeat_ok", flush=True)
@@ -165,6 +166,7 @@ async def run_soak(args: argparse.Namespace) -> SoakSession:
     finally:
         try:
             await application.stop()
+            metrics.record_runtime_progress(dependencies.runtime.candles_processed)
             print("checkpoint_ok", flush=True)
         except Exception as exc:
             if session.status is SoakStatus.RUNNING:
