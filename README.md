@@ -17,9 +17,10 @@ phase. The prospective `Breakout Retest v2` holdout covers BTCUSDT and ETHUSDT
 - ✅ RAW → DDS, versioned indicators/regimes, backtest, Risk Engine and CI are implemented.
 - ✅ Python 3.12 unit and PostgreSQL 17 integration baselines are enforced in CI.
 - ✅ Sealed holdout pipeline with incremental updates (`scripts/update_holdout_data.py`)
-- 🚧 Paper trading blocked: core exchange/runtime/recovery components exist, but
-  application composition, reconciliation and operational
-  safety gates are not complete.
+- ✅ Paper runtime composition is available with fail-closed preflight, PostgreSQL
+  recovery, indicator warmup, the shared RiskEngine and graceful checkpointing.
+- 🚧 A long-running market subscription and reconciliation gate remain required
+  before an operational paper pilot.
 - ⛔ Live trading blocked: the paper execution path exists, but live order management,
   exchange reconciliation, and operational monitoring are not implemented.
 
@@ -107,6 +108,24 @@ python .\scripts\migrate_database.py
 # Optional: target an isolated database explicitly
 python .\scripts\migrate_database.py --database-url $env:TEST_DATABASE_URL
 ```
+
+## Run the paper application
+
+Apply migrations first, then start the only paper composition root:
+
+```bash
+export TRADING_MODE=paper
+python scripts/run_paper.py
+```
+
+Startup checks paper-only mode, exchange/symbol/capital/risk configuration, the
+PostgreSQL connection, the migration journal and repository restore access. `live`,
+unknown modes, an unavailable database or missing migrations block startup. State is
+restored before market warmup; fewer than 200 valid closed 1h candles for any configured
+symbol keeps the runtime observable but disables strategy orders. SIGINT/SIGTERM stops
+new events, completes the active candle, writes runtime and PnL checkpoints and closes
+database connections. Orders, fills and snapshots use idempotent persistence, so restart
+continues from the saved market sequence rather than replaying confirmed work.
 
 ## Bybit Connection Check
 

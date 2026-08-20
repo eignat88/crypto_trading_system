@@ -69,6 +69,7 @@ class PaperTradingRuntime:
         self._last_checkpoint_sequence = 0
         self._start_time: datetime | None = None
         self._shutdown_event = asyncio.Event()
+        self.trading_enabled = True
 
     @property
     def is_running(self) -> bool:
@@ -173,7 +174,7 @@ class PaperTradingRuntime:
         self.execution_engine.on_market_event(event)
 
         # Run strategy if configured
-        if self.strategy is not None:
+        if self.strategy is not None and self.trading_enabled:
             try:
                 requests = await self.strategy.on_candle(candle, self.execution_engine)
 
@@ -236,7 +237,7 @@ class PaperTradingRuntime:
         if self._candles_processed % self.checkpoint_interval == 0:
             await self._checkpoint()
 
-    async def run_async(self) -> None:
+    async def run_async(self, *, restore_on_start: bool = True) -> None:
         """Run the paper trading runtime asynchronously.
 
         This method:
@@ -261,7 +262,7 @@ class PaperTradingRuntime:
 
         try:
             # Restore state
-            restored_state = await self.restore_state()
+            restored_state = await self.restore_state() if restore_on_start else None
             
             if restored_state is not None:
                 restored = True
@@ -317,6 +318,10 @@ class PaperTradingRuntime:
         """Request graceful shutdown."""
         logger.info("Stop requested")
         self._shutdown_event.set()
+
+    async def checkpoint(self) -> None:
+        """Persist a checkpoint even when the market loop was never started."""
+        await self._checkpoint()
 
     async def shutdown(self) -> None:
         """Gracefully shutdown the runtime."""

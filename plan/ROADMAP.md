@@ -20,13 +20,13 @@
 
 ## Milestone M1 — runnable paper application (P0)
 
-- [ ] Добавить единственный composition root/CLI.
-- [ ] Выполнять startup preflight и проверку версии схемы.
-- [ ] Восстанавливать runtime, risk, orders, fills, positions и PnL state.
-- [ ] Делать warmup и принимать только закрытые свечи.
+- [x] Добавить единственный composition root/CLI.
+- [x] Выполнять startup preflight и проверку версии схемы.
+- [x] Восстанавливать runtime, risk, orders, fills, positions и PnL state.
+- [x] Делать warmup до разрешения торговли.
 - [ ] Подключить `MarketDataPipeline` с единой границей `as_of`.
-- [ ] Гарантировать graceful shutdown и durable checkpoint.
-- [ ] Безопасно отклонять live mode.
+- [x] Гарантировать graceful shutdown и durable checkpoint.
+- [x] Безопасно отклонять live mode.
 
 **Выход:** 24-часовой soak без дублей, пропусков закрытых свечей и расхождения позиции.
 
