@@ -9,17 +9,21 @@ import os
 import signal
 import sys
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import structlog
 
-from app.config.settings import Settings, TradingMode
-from app.monitoring.pipeline_health import PipelineHealthMonitor
-from app.monitoring.risk_health import RiskHealthMonitor
-from app.monitoring.soak_metrics import SoakMetrics
-from app.monitoring.soak_session import SoakSession, SoakStatus
-from app.reporting.paper_soak_report import generate_paper_soak_report
-from app.runtime.dependencies import build_paper_dependencies
-from app.runtime.paper_application import PaperApplication
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from app.config.settings import Settings, TradingMode  # noqa: E402
+from app.monitoring.pipeline_health import PipelineHealthMonitor  # noqa: E402
+from app.monitoring.risk_health import RiskHealthMonitor, RiskHealthResult  # noqa: E402
+from app.monitoring.soak_metrics import SoakMetrics  # noqa: E402
+from app.monitoring.soak_session import SoakSession, SoakStatus  # noqa: E402
+from app.reporting.paper_soak_report import generate_paper_soak_report  # noqa: E402
+from app.runtime.dependencies import build_paper_dependencies  # noqa: E402
+from app.runtime.paper_application import PaperApplication  # noqa: E402
 
 ALLOWED_SYMBOLS = frozenset({"BTCUSDT", "ETHUSDT"})
 
@@ -59,6 +63,20 @@ def validate_args(
         raise ValueError("end-time must be after start-time")
     args.symbols = symbols
     return start, end
+
+
+def record_risk_status(risk: RiskHealthResult, metrics: SoakMetrics) -> None:
+    """Record a risk trading block without treating the healthy runtime as failed.
+
+    A risk block is an expected fail-closed operating state (for example while
+    market warmup is incomplete).  The evidence remains visible in the report,
+    but only an actual runtime/pipeline failure terminates the soak.
+    """
+    status = risk.risk_status.value if risk.trading_enabled else "BLOCKED"
+    print(f"risk_status={status}", flush=True)
+    if not risk.trading_enabled:
+        metrics.violations.extend(risk.reasons)
+        print(f"risk_warning={','.join(risk.reasons)}", flush=True)
 
 
 async def run_soak(args: argparse.Namespace) -> SoakSession:
@@ -113,10 +131,7 @@ async def run_soak(args: argparse.Namespace) -> SoakSession:
             pipeline_label = "HEALTHY" if pipeline.trading_enabled else pipeline.status.value
             print(f"pipeline_health={pipeline_label}", flush=True)
             risk = risk_monitor.check(dependencies.risk_engine)
-            print(f"risk_status={risk.risk_status.value}", flush=True)
-            if not risk.trading_enabled:
-                metrics.violations.extend(risk.reasons)
-                raise RuntimeError("risk monitor disabled trading")
+            record_risk_status(risk, metrics)
             remaining = max(0.0, (end - datetime.now(UTC)).total_seconds())
             await asyncio.sleep(min(args.sample_seconds, remaining))
         if session.status is SoakStatus.RUNNING:

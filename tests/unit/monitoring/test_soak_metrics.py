@@ -1,7 +1,10 @@
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 from app.monitoring.heartbeat import RuntimeHealth
+from app.monitoring.risk_health import RiskHealthResult, RiskHealthStatus
 from app.monitoring.soak_metrics import SoakMetrics
+from scripts.run_paper_soak import record_risk_status
 
 
 def test_soak_metrics_detects_heartbeat_sequence_regression():
@@ -21,3 +24,21 @@ def test_soak_metrics_serializes_runtime_uptime():
         RuntimeHealth("runtime-1", "RUNNING", 10, now + timedelta(seconds=12), now, now)
     )
     assert metrics.to_dict()["heartbeats"][0]["uptime_seconds"] == 12
+
+
+def test_risk_block_is_recorded_as_warning_without_raising(capsys):
+    metrics = SoakMetrics()
+    risk = RiskHealthResult(
+        RiskHealthStatus.CRITICAL,
+        Decimal("0"),
+        Decimal("0"),
+        False,
+        ("warmup_not_ready",),
+    )
+
+    record_risk_status(risk, metrics)
+
+    assert metrics.violations == ["warmup_not_ready"]
+    assert capsys.readouterr().out == (
+        "risk_status=BLOCKED\nrisk_warning=warmup_not_ready\n"
+    )
