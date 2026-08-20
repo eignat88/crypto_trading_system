@@ -8,10 +8,12 @@ from typing import Any
 import asyncpg  # type: ignore[import-untyped]
 from sqlalchemy import create_engine
 
+from app.collectors.candle_collector import CandleCollector
 from app.config.settings import Settings
 from app.database.paper_state_repository_pg import PaperStateRepositoryPostgres
+from app.exchange.bybit_client import BybitClient
+from app.exchange.bybit_paper_market_data import BybitPaperMarketData
 from app.exchange.paper_execution_engine import ExecutionRequest, PaperExecutionEngine
-from app.exchange.paper_market_data import PaperMarketData
 from app.exchange.paper_state_repository import PaperStateRepository
 from app.execution.paper_trading_runtime import PaperTradingRuntime
 from app.monitoring.heartbeat import Heartbeat, PostgresHeartbeatRepository
@@ -68,6 +70,7 @@ class PaperDependencies:
     initial_capital: Decimal
     risk_config: RiskConfig
     warmup_candles: int = 200
+    market_data_bootstrap: Callable[[], Awaitable[dict[str, int]]] | None = None
     pnl_checkpoint: Callable[[], Awaitable[None]] | None = None
     metadata: dict[str, Any] | None = None
     heartbeat: Heartbeat | None = None
@@ -99,8 +102,24 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     execution = PaperExecutionEngine(state_repository=repository)
     execution.cash_balance = capital
     heartbeat = Heartbeat("paper-runtime-001", PostgresHeartbeatRepository(monitoring_pool))
+    symbols = [
+        value.strip().removesuffix("-SPOT")
+        for value in settings.trading_symbols.split(",")
+        if value.strip()
+    ]
+    bybit = BybitClient()
+    market_data = BybitPaperMarketData(
+        connection=connection,
+        collector=CandleCollector(bybit),
+        symbols=symbols,
+        interval=settings.paper_market_interval,
+        warmup_candles=settings.paper_market_warmup_candles,
+        backfill_buffer=settings.paper_market_backfill_buffer,
+        poll_seconds=settings.paper_market_poll_seconds,
+        stale_grace_seconds=settings.paper_market_stale_grace_seconds,
+    )
     runtime = PaperTradingRuntime(
-        market_data=PaperMarketData([]),
+        market_data=market_data,
         execution_engine=execution,
         risk_manager=RiskEngineAdapter(risk_engine, capital),
         state_repository=repository,
@@ -147,6 +166,8 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         return {str(row["symbol"]): int(row["candle_count"]) for row in rows}
 
     async def close() -> None:
+        market_data.stop()
+        await bybit.close()
         await monitoring_pool.close()
         await connection.close()
         sync_engine.dispose()
@@ -166,10 +187,12 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         close=close,
         trading_mode=settings.trading_mode.value,
         exchange=settings.bybit_environment,
-        symbols=[value.strip() for value in settings.trading_symbols.split(",") if value.strip()],
+        symbols=symbols,
         initial_capital=capital,
         risk_config=risk_config,
         pnl_checkpoint=pnl_checkpoint,
+        market_data_bootstrap=market_data.bootstrap,
+        warmup_candles=settings.paper_market_warmup_candles,
         heartbeat=heartbeat,
         notifier=ConsoleNotifier(),
         session_manager=session_manager,

@@ -16,7 +16,7 @@ composition root», а **стендовая валидация непрерыв�
 | Data pipelines | ✅ Код готов | RAW/DDS quality/checkpoints, derived pipeline, MART ETL | Целевой PostgreSQL pilot и расписание |
 | Backtest/strategies/risk | ✅ Ядро готово | Causal execution, costs, walk-forward, frozen v2, Risk Engine | Зафиксировать pilot candidate |
 | Sealed holdout | 🚧 Накопление | Fail-closed update, health и preflight | Только технические проверки до unlock |
-| Paper application | ✅ Код готов | CLI, preflight, restore, warmup, managed pipeline, checkpoint, shutdown | Подключить реальный long-running feed |
+| Paper application | ✅ Код готов | CLI, preflight, restore, Bybit REST bootstrap/polling, warmup, managed pipeline, checkpoint, shutdown | Проверить production feed коротким стендовым soak |
 | Restart/idempotency | ✅ Тестовый baseline | PostgreSQL E2E для sequence, orders/fills, PnL restore; duplicate-order guard | Управляемый restart во время soak |
 | Monitoring | 🚧 Foundation готов | Durable heartbeat, DB/market/pipeline/risk monitors, console notifier | Runtime wiring, watchdog и alert transport |
 | Emergency stop | 🚧 Primitive готов | Идемпотентная последовательность disable/close/checkpoint/audit/notify/stop | Автоматические triggers и fault injection |
@@ -26,9 +26,9 @@ composition root», а **стендовая валидация непрерыв�
 
 ## Важные ограничения текущей реализации
 
-1. `build_paper_dependencies()` создаёт `PaperMarketData([])`: production CLI
-   безопасен, но его источник конечен и пуст. Наличие managed pipeline не означает,
-   что непрерывная подписка уже подключена.
+1. `build_paper_dependencies()` использует long-running Bybit REST → RAW → DDS
+   источник закрытых 1h свечей. Статический `PaperMarketData` сохранён только для
+   детерминированных тестов; production-поток требует стендовой проверки с PostgreSQL.
 2. Health monitors и `EmergencyStop` существуют как компоненты, но ещё не образуют
    единый автоматический watchdog в основном runtime.
 3. Soak runner сохраняет heartbeat и JSON evidence, однако сам по себе не доказывает
@@ -38,7 +38,7 @@ composition root», а **стендовая валидация непрерыв�
 
 ## Следующие задачи по порядку
 
-1. Подключить long-running closed-candle source к единственному composition root.
+1. Выполнить короткий smoke soak long-running closed-candle source.
 2. Связать DB/market/pipeline/risk monitors с emergency stop и внешним notifier.
 3. Провести fault-injection и короткий smoke soak, затем 24–72-часовой стендовый soak.
 4. Во время soak выполнить restart и подтвердить monotonic sequence, checkpoint и

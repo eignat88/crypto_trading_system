@@ -59,6 +59,11 @@ class Settings(BaseSettings):
     paper_runtime_timezone: str = Field(default="UTC")
     paper_runtime_start: str = Field(default="09:00", pattern=r"^\d{2}:\d{2}$")
     paper_runtime_end: str = Field(default="19:00", pattern=r"^\d{2}:\d{2}$")
+    paper_market_interval: str = Field(default="1h")
+    paper_market_warmup_candles: int = Field(default=200, ge=1)
+    paper_market_backfill_buffer: int = Field(default=50, ge=0)
+    paper_market_poll_seconds: float = Field(default=60.0, gt=0)
+    paper_market_stale_grace_seconds: int = Field(default=600, ge=0)
 
     # Logging
     log_level: str = Field(default="INFO")

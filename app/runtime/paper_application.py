@@ -66,6 +66,13 @@ class PaperApplication:
         self._logger.info("risk_engine_initialized")
 
         self.lifecycle.transition(RuntimeState.WARMUP)
+        bootstrap_ok = True
+        if self.dependencies.market_data_bootstrap is not None:
+            try:
+                await self.dependencies.market_data_bootstrap()
+            except Exception as exc:
+                bootstrap_ok = False
+                self._logger.exception("market_data_error", error=str(exc))
         available = await self.dependencies.warmup(
             self.dependencies.symbols, self.dependencies.warmup_candles
         )
@@ -82,7 +89,7 @@ class PaperApplication:
             else None
         )
         inside_window = self.dependencies.session_manager is None or session is not None
-        self.trading_enabled = not insufficient and inside_window
+        self.trading_enabled = bootstrap_ok and not insufficient and inside_window
         self.dependencies.runtime.trading_enabled = self.trading_enabled
         self.dependencies.runtime.session_id = session.session_id if session is not None else None
         self._logger.info(

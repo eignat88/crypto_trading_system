@@ -5,7 +5,7 @@ import logging
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
 import structlog
 
@@ -51,7 +51,7 @@ class PaperTradingRuntime:
 
     def __init__(
         self,
-        market_data: PaperMarketData,
+        market_data: Any,
         execution_engine: PaperExecutionEngine,
         strategy: StrategyProtocol | None = None,
         risk_manager: RiskManagerProtocol | None = None,
@@ -190,7 +190,8 @@ class PaperTradingRuntime:
         self.execution_engine.on_market_event(event)
 
         # Run strategy if configured
-        if self.strategy is not None and self.trading_enabled:
+        source_ready = getattr(self.market_data, "ready", True)
+        if self.strategy is not None and self.trading_enabled and source_ready:
             try:
                 requests = await self.strategy.on_candle(candle, self.execution_engine)
 
@@ -335,17 +336,25 @@ class PaperTradingRuntime:
         Yields:
             MarketEvent instances from the market data source.
         """
-        for event in self.market_data.stream():
-            if self._shutdown_event.is_set():
-                break
-            yield event
-            # Allow other tasks to run
-            await asyncio.sleep(0)
+        if hasattr(self.market_data, "stream_async"):
+            async for event in self.market_data.stream_async():
+                if self._shutdown_event.is_set():
+                    break
+                yield event
+        else:
+            for event in self.market_data.stream():
+                if self._shutdown_event.is_set():
+                    break
+                yield event
+                await asyncio.sleep(0)
 
     def stop(self) -> None:
         """Request graceful shutdown."""
         logger.info("Stop requested")
         self._shutdown_event.set()
+        stop_source = getattr(self.market_data, "stop", None)
+        if stop_source is not None:
+            stop_source()
 
     async def checkpoint(self) -> None:
         """Persist a checkpoint even when the market loop was never started."""
