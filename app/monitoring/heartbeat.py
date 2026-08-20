@@ -31,26 +31,30 @@ class HeartbeatRepository(Protocol):
 
 
 class PostgresHeartbeatRepository:
-    def __init__(self, connection: object) -> None:
-        self.connection = connection
+    """Persist heartbeats on a pool isolated from transactional runtime state.
+
+    A dedicated pool is intentional: asyncpg connections allow one operation at
+    a time, while shutdown checkpointing can overlap a monitoring write.
+    """
+
+    def __init__(self, pool: object) -> None:
+        self.pool = pool
 
     async def save(self, health: RuntimeHealth) -> None:
-        await self.connection.execute(  # type: ignore[attr-defined]
-            """INSERT INTO monitoring.runtime_health
-               (runtime_id, status, sequence, heartbeat_time,
-                last_market_event_time, created_at)
-               VALUES ($1, $2, $3, $4, $5, $6)
-               ON CONFLICT (runtime_id) DO UPDATE SET
-                 status = EXCLUDED.status, sequence = EXCLUDED.sequence,
-                 heartbeat_time = EXCLUDED.heartbeat_time,
-                 last_market_event_time = EXCLUDED.last_market_event_time""",
-            health.runtime_id,
-            health.status,
-            health.sequence,
-            health.heartbeat_time,
-            health.last_market_event_time,
-            health.created_at,
-        )
+        async with self.pool.acquire() as connection:  # type: ignore[attr-defined]
+            await connection.execute(
+                """INSERT INTO monitoring.runtime_health
+                   (runtime_id, status, sequence, last_cycle_time,
+                    last_market_event_time, uptime_seconds, created_at)
+                   VALUES ($1, $2, $3, $4, $5, $6, $7)""",
+                health.runtime_id,
+                health.status,
+                health.sequence,
+                health.heartbeat_time,
+                health.last_market_event_time,
+                int(health.uptime_seconds),
+                health.created_at,
+            )
 
 
 class Heartbeat:
