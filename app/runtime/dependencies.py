@@ -14,6 +14,8 @@ from app.exchange.paper_execution_engine import ExecutionRequest, PaperExecution
 from app.exchange.paper_market_data import PaperMarketData
 from app.exchange.paper_state_repository import PaperStateRepository
 from app.execution.paper_trading_runtime import PaperTradingRuntime
+from app.monitoring.heartbeat import Heartbeat, PostgresHeartbeatRepository
+from app.monitoring.notifier import ConsoleNotifier, Notifier
 from app.risk.persistence import PostgresRiskStateStore
 from app.risk.risk_engine import RiskConfig, RiskEngine
 
@@ -66,11 +68,18 @@ class PaperDependencies:
     warmup_candles: int = 200
     pnl_checkpoint: Callable[[], Awaitable[None]] | None = None
     metadata: dict[str, Any] | None = None
+    heartbeat: Heartbeat | None = None
+    notifier: Notifier | None = None
 
 
 async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     """Build production adapters once; no second runtime or risk controller is created."""
     connection = await asyncpg.connect(settings.database_url_sync)
+    monitoring_pool = await asyncpg.create_pool(
+        settings.database_url_sync,
+        min_size=1,
+        max_size=2,
+    )
     repository = PaperStateRepositoryPostgres(connection)
     sync_engine = create_engine(settings.database_url_sync)
     risk_config = RiskConfig(
@@ -86,11 +95,13 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     capital = Decimal(str(settings.paper_initial_balance))
     execution = PaperExecutionEngine(state_repository=repository)
     execution.cash_balance = capital
+    heartbeat = Heartbeat("paper-runtime-001", PostgresHeartbeatRepository(monitoring_pool))
     runtime = PaperTradingRuntime(
         market_data=PaperMarketData([]),
         execution_engine=execution,
         risk_manager=RiskEngineAdapter(risk_engine, capital),
         state_repository=repository,
+        heartbeat=heartbeat,
     )
 
     async def database_check() -> bool:
@@ -98,7 +109,13 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
 
     async def migration_check() -> bool:
         return bool(
-            await connection.fetchval("SELECT to_regclass('public.schema_migrations') IS NOT NULL")
+            await connection.fetchval(
+                """SELECT to_regclass('public.schema_migrations') IS NOT NULL
+                          AND to_regclass('monitoring.runtime_health') IS NOT NULL
+                          AND EXISTS (
+                              SELECT 1 FROM public.schema_migrations WHERE version = 50
+                          )"""
+            )
         )
 
     async def warmup(symbols: list[str], required: int) -> dict[str, int]:
@@ -120,6 +137,7 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         return {str(row["symbol"]): int(row["candle_count"]) for row in rows}
 
     async def close() -> None:
+        await monitoring_pool.close()
         await connection.close()
         sync_engine.dispose()
 
@@ -142,4 +160,6 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         initial_capital=capital,
         risk_config=risk_config,
         pnl_checkpoint=pnl_checkpoint,
+        heartbeat=heartbeat,
+        notifier=ConsoleNotifier(),
     )
