@@ -75,6 +75,7 @@ class PaperTradingRuntime:
         self._start_time: datetime | None = None
         self._shutdown_event = asyncio.Event()
         self.trading_enabled = True
+        self.session_id: str | None = None
 
     @property
     def is_running(self) -> bool:
@@ -213,7 +214,7 @@ class PaperTradingRuntime:
                         result = self.execution_engine.execute(
                             request,
                             client_order_id=(
-                                f"paper:{sequence}:{request_index}:"
+                                f"{self.session_id or 'paper'}:{sequence}:{request_index}:"
                                 f"{request.symbol}:{request.side.value}"
                             ),
                         )

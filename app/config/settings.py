@@ -56,6 +56,9 @@ class Settings(BaseSettings):
 
     # Paper Trading
     paper_initial_balance: float = Field(default=5000.0, gt=0.0)
+    paper_runtime_timezone: str = Field(default="UTC")
+    paper_runtime_start: str = Field(default="09:00", pattern=r"^\d{2}:\d{2}$")
+    paper_runtime_end: str = Field(default="19:00", pattern=r"^\d{2}:\d{2}$")
 
     # Logging
     log_level: str = Field(default="INFO")

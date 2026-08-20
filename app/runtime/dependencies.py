@@ -18,6 +18,8 @@ from app.monitoring.heartbeat import Heartbeat, PostgresHeartbeatRepository
 from app.monitoring.notifier import ConsoleNotifier, Notifier
 from app.risk.persistence import PostgresRiskStateStore
 from app.risk.risk_engine import RiskConfig, RiskEngine
+from app.runtime.scheduler import TradingSchedule, parse_hhmm
+from app.runtime.session_manager import SessionManager
 
 
 class RiskEngineAdapter:
@@ -70,6 +72,7 @@ class PaperDependencies:
     metadata: dict[str, Any] | None = None
     heartbeat: Heartbeat | None = None
     notifier: Notifier | None = None
+    session_manager: SessionManager | None = None
 
 
 async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
@@ -102,6 +105,13 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         risk_manager=RiskEngineAdapter(risk_engine, capital),
         state_repository=repository,
         heartbeat=heartbeat,
+    )
+    session_manager = SessionManager(
+        TradingSchedule(
+            timezone=settings.paper_runtime_timezone,
+            start=parse_hhmm(settings.paper_runtime_start),
+            end=parse_hhmm(settings.paper_runtime_end),
+        )
     )
 
     async def database_check() -> bool:
@@ -162,4 +172,5 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         pnl_checkpoint=pnl_checkpoint,
         heartbeat=heartbeat,
         notifier=ConsoleNotifier(),
+        session_manager=session_manager,
     )
