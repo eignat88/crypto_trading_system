@@ -1,12 +1,12 @@
 # План разработки Crypto Trading System
 
-**Первичный аудит:** 19.08.2026. **Последняя актуализация:** 20.08.2026.
+**Первичный аудит:** 19.08.2026. **Последняя актуализация:** 21.08.2026.
 
 ## 1. Резюме
 
 Система имеет рабочее исследовательское ядро и собранный paper composition root,
 но пока не готова к длительному paper pilot и тем более к live trading. Главная
-задача цикла — подключить живой long-running источник к единственному runtime,
+задача цикла — проверить подключённый long-running источник на целевом стенде,
 замкнуть health monitors на emergency stop/reconciliation и доказать поведение
 24–72-часовым soak, а не добавлять стратегии.
 
@@ -25,7 +25,8 @@
 - Стратегии Trend DCA и Breakout Retest, включая frozen-спецификацию v2.
 - Risk Engine и сохранение risk state.
 - Sealed holdout pipeline с health/preflight-проверками.
-- Paper-компоненты: market-data feed, exchange/fill simulation, execution engine,
+- Paper-компоненты: Bybit REST → RAW → DDS long-running market-data feed,
+  exchange/fill simulation, execution engine,
   runtime, PostgreSQL repositories, recovery state, метрики и PnL reporting.
 - Единая цепочка миграций в `database/migrations/` и checksum-protected runner
   `scripts/migrate_database.py` с журналом `public.schema_migrations`.
@@ -40,11 +41,14 @@
   детерминированный `client_order_id` предотвращает повторный ордер.
 - Persistent heartbeat, health monitors, notifier abstraction, emergency-stop
   coordinator, bounded soak runner и JSON evidence report.
+- Настраиваемое календарное окно paper-сессии и PowerShell-скрипты запуска через
+  Windows Task Scheduler.
 
 ### Реализовано частично или не интегрировано
 
-1. Штатный entry point — `scripts/run_paper.py`, но production dependency builder
-   пока создаёт конечный пустой `PaperMarketData`; live subscription не подключена.
+1. Штатный entry point `scripts/run_paper.py` подключён к long-running Bybit REST
+   source с bootstrap/backfill, восстановлением gaps и polling закрытых 1h свечей;
+   короткий прогон на целевой PostgreSQL ещё не выполнен.
 2. Managed market pipeline подключён и протестирован, но его длительный запуск с
    реальным источником и целевой PostgreSQL ещё не доказан.
 3. DDS → MART ETL реализован и протестирован, однако production-расписание и
@@ -117,7 +121,8 @@
   root с общей
   границей `as_of` и запретом обработки незакрытой свечи.
 - [x] Добавить PostgreSQL E2E restart для runtime/checkpoint/order/fill/PnL restore.
-- [ ] Подключить long-running event source и выполнить управляемый restart в soak.
+- [x] Подключить long-running event source к production dependency builder.
+- [ ] Выполнить управляемый restart в soak и проверить resume boundary на стенде.
 
 **Критерий выхода:** 24-часовой локальный/стендовый soak проходит без дублей,
 расхождений позиции и пропущенных закрытых свечей; live mode продолжает завершаться
@@ -127,8 +132,9 @@
 
 - [x] Добавить bounded soak CLI, session model, heartbeat samples, lifecycle
   evidence и JSON report.
-- [ ] Подключить живые closed-candle events: завершение пустого источника не должно
-  ошибочно считаться доказательством успешного soak.
+- [x] Подключить polling закрытых Bybit candles через RAW/DDS к production runtime.
+- [ ] Доказать market throughput на стенде: отсутствие нового часового события не
+  должно ошибочно считаться доказательством успешного soak.
 - [ ] Сначала выполнить короткий smoke, затем 24–72 часа; во время прогона сделать restart.
 - [ ] Проверить market throughput/gaps, monotonic sequence, checkpoint freshness,
   duplicate orders, позиции, PnL и сохранность evidence.
@@ -201,7 +207,7 @@
 | 2 | Единые миграции | 1 | Воспроизводимая PostgreSQL schema |
 | 3 | Paper composition/lifecycle | 1, 2 | Выполнено в коде |
 | 4 | Restart/idempotency E2E | 3 | Выполнен тестовый baseline |
-| 5 | Long-running source и soak | 3, 4 | Стендовое evidence |
+| 5 | Long-running source и soak | 3, 4 | Source готов; требуется стендовое evidence |
 | 6 | Monitoring wiring/emergency stop | 5 | Fail-closed эксплуатация |
 | 7 | Reconciliation | 4–6 | Доказуемая согласованность состояния |
 | 8 | MART/daily report | 2, 3 | Операционная отчётность |

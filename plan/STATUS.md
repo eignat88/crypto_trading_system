@@ -1,6 +1,6 @@
 # Статус проекта Crypto Trading System
 
-## Текущий срез — 20.08.2026
+## Текущий срез — 21.08.2026
 
 Исследовательский и paper foundation реализованы. Текущий этап — не «сборка
 composition root», а **стендовая валидация непрерывного paper runtime**, интеграция
@@ -16,11 +16,12 @@ composition root», а **стендовая валидация непрерыв�
 | Data pipelines | ✅ Код готов | RAW/DDS quality/checkpoints, derived pipeline, MART ETL | Целевой PostgreSQL pilot и расписание |
 | Backtest/strategies/risk | ✅ Ядро готово | Causal execution, costs, walk-forward, frozen v2, Risk Engine | Зафиксировать pilot candidate |
 | Sealed holdout | 🚧 Накопление | Fail-closed update, health и preflight | Только технические проверки до unlock |
-| Paper application | ✅ Код готов | CLI, preflight, restore, Bybit REST bootstrap/polling, warmup, managed pipeline, checkpoint, shutdown | Проверить production feed коротким стендовым soak |
+| Paper application | ✅ Код готов | CLI, preflight, restore, Bybit REST → RAW → DDS polling, warmup, managed pipeline, checkpoint, shutdown | Проверить production feed коротким стендовым soak |
 | Restart/idempotency | ✅ Тестовый baseline | PostgreSQL E2E для sequence, orders/fills, PnL restore; duplicate-order guard | Управляемый restart во время soak |
 | Monitoring | 🚧 Foundation готов | Durable heartbeat, DB/market/pipeline/risk monitors, console notifier | Runtime wiring, watchdog и alert transport |
 | Emergency stop | 🚧 Primitive готов | Идемпотентная последовательность disable/close/checkpoint/audit/notify/stop | Автоматические triggers и fault injection |
 | Soak validation | 🚧 Runner готов | Bounded CLI, samples, lifecycle evidence, JSON report | 24–72 часа с живыми событиями |
+| Scheduling | 🚧 Код готов | Настраиваемое окно paper-сессии и Windows Task Scheduler scripts | Проверить расписание и автоматический restart на целевом хосте |
 | Reconciliation | ❌ Не реализовано | Отдельного operational reconciler нет | До любого paper pilot |
 | Live execution | ⛔ Запрещено | Live mode отклоняется | Только отдельный go/no-go после pilot gates |
 
@@ -38,6 +39,9 @@ composition root», а **стендовая валидация непрерыв�
 6. Предыдущие короткие `restart_before`/`restart_after` с sequence=0 не являются
    доказательством отказа: restart/idempotency остаётся проверить на событии X с
    ненулевым durable checkpoint. Реализовано, требуется проверка.
+7. Календарное окно по умолчанию — будни 09:00–19:00 UTC; вне окна runtime
+   безопасно не открывает сессию. PowerShell-скрипты установки и запуска задачи
+   подготовлены, но их работа на целевом Windows-хосте ещё не подтверждена.
 
 ## Следующие задачи по порядку
 
