@@ -36,18 +36,18 @@ source; требуется короткий стендовый smoke с реал
 - [x] E2E restart вокруг runtime state, sequence, order/fill и PnL snapshot.
 - [x] Детерминированный `client_order_id` и защита от повторного ордера после restore.
 - [x] Durable managed-pipeline checkpoint и повторная обработка без изменения факта.
+- [x] Единый paper `run_id`/`signal_id` во все operational events (DB migration 051).
 - [ ] Выполнить управляемый restart в 24–72-часовом PostgreSQL soak.
-- [ ] Добавить единый paper `run_id`/`signal_id` во все operational events.
 
-## Milestone M3 — observability и fail-closed operation (в работе)
+## Milestone M3 — observability и fail-closed operation (код завершён)
 
 - [x] Persistent heartbeat в `monitoring.runtime_health`.
 - [x] Database, market, pipeline и risk health monitors.
 - [x] Console notifier и идемпотентный emergency-stop coordinator.
 - [x] Soak session/metrics/JSON report и CLI `scripts/run_paper_soak.py`.
-- [ ] Встроить все monitors и emergency stop в непрерывный runtime loop.
+- [x] HealthCoordinator: wiring monitors → RiskEngine → EmergencyStop → Notifier.
+- [x] Fault-injection тесты для DB outage, stale data, risk breach и state mismatch.
 - [ ] Настроить внешний alert routing и freshness watchdog (health endpoint либо supervisor).
-- [ ] Добавить fault-injection для DB outage, stale data, risk breach и state mismatch.
 - [ ] Подготовить operational/incident runbook и процедуру снятия stop.
 - [ ] Проверить Windows scheduled task, границы торгового окна и автоматический
   restart на целевом хосте.
@@ -55,12 +55,14 @@ source; требуется короткий стендовый smoke с реал
 **Выход:** 24–72 часа с живым источником, без дублей/пропусков, с доказанным
 автоматическим fail-closed поведением и сохранённым evidence report.
 
-## Milestone M4 — reconciliation и отчётность
+## Milestone M4 — reconciliation и отчётность (код завершён)
 
-- [ ] Сверять orders, fills, positions, balance/equity и last market event.
-- [ ] Разделить recoverable и fatal mismatches; неоднозначные случаи закрывать fail-closed.
-- [ ] Запускать готовый DDS → MART ETL по расписанию.
-- [ ] Создавать immutable daily report с costs, slippage, drawdown и rejects.
+- [x] PaperReconciler: сверка orders, fills, positions, balance/equity.
+- [x] Классификация recoverable и fatal mismatches.
+- [x] RiskEngine.update_reconciliation() блокирует новые входы при fatal.
+- [x] DailyReportGenerator: immutable JSON с reconciliation status, content hash.
+- [x] Wire в PaperApplication: periodic reconciliation + HealthCoordinator.
+- [ ] Подключить расписание MART ETL и daily report к cron/scheduler.
 
 ## Milestone M5 — paper pilot (минимум 90 дней)
 

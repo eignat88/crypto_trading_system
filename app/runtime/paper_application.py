@@ -112,6 +112,26 @@ class PaperApplication:
             name="paper-trading-runtime",
         )
         self._logger.info("paper_runtime_started", trading_enabled=self.trading_enabled)
+
+        # Start health coordinator periodic checks
+        if self.dependencies.health_coordinator is not None:
+            await self.dependencies.health_coordinator.start_periodic()
+            self._logger.info("health_coordinator_started")
+
+        # Run initial reconciliation
+        if self.dependencies.reconciler is not None:
+            try:
+                recon_result = await self.dependencies.reconciler.reconcile()
+                self.dependencies.risk_engine.update_reconciliation(not recon_result.has_fatal)
+                self._logger.info(
+                    "reconciliation_completed",
+                    fatal=recon_result.fatal_count,
+                    recoverable=recon_result.recoverable_count,
+                )
+            except Exception as exc:
+                self._logger.exception("reconciliation_failed")
+                self.dependencies.risk_engine.update_reconciliation(False)
+
         if self.dependencies.session_manager is not None:
             close_delay = self.dependencies.session_manager.seconds_until_close()
             if close_delay is not None:
@@ -140,6 +160,11 @@ class PaperApplication:
             self.trading_enabled = False
             self.dependencies.runtime.trading_enabled = False
             self.dependencies.runtime.stop()
+
+            # Stop health coordinator
+            if self.dependencies.health_coordinator is not None:
+                await self.dependencies.health_coordinator.stop_periodic()
+
             if self._session_close_task is not None:
                 self._session_close_task.cancel()
                 with suppress(asyncio.CancelledError):

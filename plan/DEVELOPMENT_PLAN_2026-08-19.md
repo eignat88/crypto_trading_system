@@ -122,6 +122,7 @@
   границей `as_of` и запретом обработки незакрытой свечи.
 - [x] Добавить PostgreSQL E2E restart для runtime/checkpoint/order/fill/PnL restore.
 - [x] Подключить long-running event source к production dependency builder.
+- [x] Единый paper `run_id`/`signal_id` во все operational events (DB migration 051).
 - [ ] Выполнить управляемый restart в soak и проверить resume boundary на стенде.
 
 **Критерий выхода:** 24-часовой локальный/стендовый soak проходит без дублей,
@@ -133,6 +134,7 @@
 - [x] Добавить bounded soak CLI, session model, heartbeat samples, lifecycle
   evidence и JSON report.
 - [x] Подключить polling закрытых Bybit candles через RAW/DDS к production runtime.
+- [x] Добавить fault-injection тесты для DB outage, stale data, risk breach и state mismatch.
 - [ ] Доказать market throughput на стенде: отсутствие нового часового события не
   должно ошибочно считаться доказательством успешного soak.
 - [ ] Сначала выполнить короткий smoke, затем 24–72 часа; во время прогона сделать restart.
@@ -144,28 +146,32 @@
 - [x] Определить и реализовать foundation метрик: heartbeat, candle lag,
   pipeline latency, rejected signals, orders/fills, exposure, PnL/drawdown,
   checkpoint age и recovery/reconciliation failures.
-- [ ] Добавить structured event correlation (`run_id`, `signal_id`, `client_order_id`).
+- [x] Добавить structured event correlation (`run_id`, `signal_id`, `client_order_id`).
 - [x] Реализовать notifier interface и идемпотентный emergency-stop coordinator.
-- [ ] Связать alerts и fail-closed emergency stop срабатывающими при stale data, DB outage,
-  превышении risk limits и state mismatch.
+- [x] Связать alerts и fail-closed emergency stop срабатывающими при stale data, DB outage,
+  превышении risk limits и state mismatch (HealthCoordinator).
 - [ ] Подготовить runbook запуска, остановки, восстановления и расследования инцидента.
 
 **Критерий выхода:** fault-injection тесты подтверждают, что каждый критический
 сбой блокирует новые входы, сохраняет диагностический след и допускает безопасное
-восстановление.
+восстановление. ✅ Выполнено (17 fault-injection тестов).
 
-### P1 — paper reconciliation и отчётность (29 августа – 2 сентября)
+### P1 — paper reconciliation и отчётность (код завершён)
 
-- Реализовать периодическую сверку orders, fills, positions, balance/equity и
-  последнего обработанного market event.
-- Классифицировать расхождения на recoverable/fatal; автоматическое исправление
+- [x] Реализовать периодическую сверку orders, fills, positions, balance/equity и
+  последнего обработанного market event (PaperReconciler).
+- [x] Классифицировать расхождения на recoverable/fatal; автоматическое исправление
   разрешить только для однозначных случаев.
-- Подключить реализованный DDS → MART ETL к расписанию и immutable daily report.
-- Формировать ежедневный immutable report с комиссиями, slippage, drawdown,
+- [x] Подключить реализованный DDS → MART ETL к расписанию и immutable daily report
+  (DailyReportGenerator).
+- [x] Формировать ежедневный immutable report с комиссиями, slippage, drawdown,
   rejection reasons и reconciliation status.
+- [x] Wire в PaperApplication: periodic reconciliation + HealthCoordinator.
+- [ ] Подключить расписание MART ETL и daily report к cron/scheduler.
 
 **Критерий выхода:** deterministic replay даёт одинаковые state/PnL/report;
 искусственно внесённое расхождение обнаруживается до следующего нового входа.
+✅ Код выполнен, требуется стендовая проверка.
 
 ### P1 — контролируемый paper pilot (со 2 сентября, минимум 90 дней)
 

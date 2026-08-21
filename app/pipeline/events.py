@@ -26,6 +26,8 @@ class PipelineResult:
     execution: Any = None
     reason: str | None = None
     stages: tuple[str, ...] = field(default_factory=tuple)
+    run_id: str = ""
+    signal_id: str = ""
 
 
 __all__ = ["MarketEvent", "PipelineResult", "PipelineStatus"]

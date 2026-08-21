@@ -14,3 +14,5 @@ class PaperOrderState:
     status: str
     created_at: datetime
     client_order_id: str | None = None
+    run_id: str | None = None
+    signal_id: str | None = None

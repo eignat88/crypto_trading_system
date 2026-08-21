@@ -7,6 +7,7 @@ from dataclasses import dataclass, field, is_dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
+from uuid import uuid4
 
 import structlog
 
@@ -107,6 +108,7 @@ class BacktestEngine:
         the current candle OHLC and execute from their deterministic reference
         level (with conservative ambiguity rules in ``Portfolio``).
         """
+        run_id = str(uuid4())
         state = initial_state or {}
         peak_equity = self.config.initial_balance
         pending_signals: list[Signal] = []
@@ -116,6 +118,7 @@ class BacktestEngine:
             candles=len(candles),
             initial_balance=self.config.initial_balance,
             end_position_policy=self.config.end_position_policy,
+            run_id=run_id,
         )
 
         for index, candle in enumerate(candles):
@@ -172,6 +175,7 @@ class BacktestEngine:
                     strategy="backtest_engine",
                     parameters_version="backtest_engine_v1",
                     metadata={"exit_source": "intrabar_level"},
+                    run_id=run_id,
                 )
                 average_volume = self._average_completed_volume(
                     candles,
@@ -184,6 +188,7 @@ class BacktestEngine:
                         candle,
                         timestamp,
                         average_volume=average_volume,
+                        run_id=run_id,
                     )
                     is not None
                 ) or closed_by_level
@@ -203,10 +208,10 @@ class BacktestEngine:
             signals = (
                 None
                 if closed_by_level
-                else self._strategy_signals(strategy, candle, indicators, state)
+                else self._strategy_signals(strategy, candle, indicators, state, run_id)
             )
             for raw_signal in self._as_signal_list(signals, candle, timestamp):
-                normalized = self._normalize_signal(raw_signal, candle, timestamp)
+                normalized = self._normalize_signal(raw_signal, candle, timestamp, run_id)
                 self.signals.append(normalized)
                 pending_signals.append(normalized)
 
@@ -232,6 +237,7 @@ class BacktestEngine:
                     strategy="backtest_engine",
                     parameters_version="backtest_engine_v1",
                     metadata={"exit_source": "end_of_backtest"},
+                    run_id=run_id,
                 )
                 average_volume = self._average_completed_volume(
                     candles,
@@ -243,6 +249,7 @@ class BacktestEngine:
                     last_candle,
                     last_time,
                     average_volume=average_volume,
+                    run_id=run_id,
                 )
 
         result = self._calculate_results()
@@ -262,6 +269,7 @@ class BacktestEngine:
         candle: dict[str, Any],
         indicators: dict[str, Any],
         state: dict[str, Any],
+        run_id: str,
     ) -> Any:
         if not isinstance(strategy, BaseStrategy):
             return strategy(candle, self.portfolio, state)
@@ -321,6 +329,7 @@ class BacktestEngine:
         candle: dict[str, Any],
         timestamp: datetime,
         average_volume: Decimal | None = None,
+        run_id: str = "",
     ) -> Fill | None:
         """Execute an immediate engine-owned signal.
 
@@ -328,7 +337,7 @@ class BacktestEngine:
         end-of-backtest liquidation, and direct unit-level compatibility. Normal
         strategy signals in ``run`` do not use this method on their signal bar.
         """
-        normalized = self._normalize_signal(signal, candle, timestamp)
+        normalized = self._normalize_signal(signal, candle, timestamp, run_id)
         self.signals.append(normalized)
         return self._create_and_execute_order(
             normalized,
@@ -358,6 +367,8 @@ class BacktestEngine:
                         codes=("NO_POSITION",),
                         reasons=("No open spot position to close",),
                         requested_quantity=quantity,
+                        run_id=signal.run_id,
+                        signal_id=signal.signal_id,
                     )
                 )
                 return None
@@ -370,6 +381,8 @@ class BacktestEngine:
             quantity=quantity,
             requested_price=requested_price,
             created_at=timestamp,
+            run_id=signal.run_id,
+            signal_id=signal.signal_id,
         )
         self.orders.append(order)
         return self._execute_order(order, average_volume=average_volume)
@@ -451,6 +464,8 @@ class BacktestEngine:
             price=execution_price,
             commission=commission,
             timestamp=order.created_at,
+            run_id=order.run_id,
+            signal_id=order.signal_id,
         )
         self.fills.append(fill)
         return fill
@@ -489,6 +504,8 @@ class BacktestEngine:
             reasons=tuple(result.reasons),
             requested_quantity=order.quantity,
             approved_quantity=approved_quantity if result.approved else None,
+            run_id=order.run_id,
+            signal_id=order.signal_id,
         )
 
     def _calculate_results(self) -> BacktestResult:
@@ -550,6 +567,7 @@ class BacktestEngine:
         signal: Signal | dict[str, Any],
         candle: dict[str, Any],
         timestamp: datetime,
+        run_id: str = "",
     ) -> Signal:
         if isinstance(signal, Signal):
             return signal
@@ -577,6 +595,7 @@ class BacktestEngine:
             indicators=indicators,
             regime=None if signal.get("regime") is None else str(signal.get("regime")),
             metadata=metadata,
+            run_id=run_id,
         )
 
     @staticmethod
