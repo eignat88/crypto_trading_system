@@ -57,6 +57,7 @@ class PaperExecutionEngine:
         self.fill_simulator = fill_simulator or FillSimulator()
         self.state_repository = state_repository
         self._last_candle: Candle | None = None
+        self._last_processed_timestamp: datetime | None = None
         self._last_sequence: int = 0
         self.cash_balance = Decimal("0")
         self.positions: dict[str, PaperPositionState] = {}
@@ -74,6 +75,11 @@ class PaperExecutionEngine:
     def last_sequence(self) -> int:
         return self._last_sequence
 
+    @property
+    def last_processed_timestamp(self) -> datetime | None:
+        """Durable candle boundary used to reject replay after a restart."""
+        return self._last_processed_timestamp
+
     async def restore_state(self) -> None:
         if self.state_repository is None:
             return
@@ -81,6 +87,7 @@ class PaperExecutionEngine:
         state = await self.state_repository.load_state()
         if state is not None:
             self._last_sequence = state.last_market_sequence
+            self._last_processed_timestamp = state.last_processed_timestamp
             self.cash_balance = state.cash_balance
 
         positions = await self.state_repository.load_positions()  # type: ignore[attr-defined]
@@ -109,7 +116,7 @@ class PaperExecutionEngine:
 
         await self.state_repository.save_state(
             PaperRuntimeState(
-                last_processed_timestamp=self._last_candle.open_time if self._last_candle else None,
+                last_processed_timestamp=self._last_processed_timestamp,
                 last_market_sequence=self._last_sequence,
                 cash_balance=self.cash_balance,
             )
@@ -149,10 +156,14 @@ class PaperExecutionEngine:
         event.candle.validate()
         if event.sequence <= self._last_sequence:
             return False
-        if self._last_candle and event.candle.open_time < self._last_candle.open_time:
+        if (
+            self._last_processed_timestamp is not None
+            and event.candle.open_time <= self._last_processed_timestamp
+        ):
             return False
         self._last_sequence = event.sequence
         self._last_candle = event.candle
+        self._last_processed_timestamp = event.candle.open_time
         self._schedule_save_state()
         return True
 

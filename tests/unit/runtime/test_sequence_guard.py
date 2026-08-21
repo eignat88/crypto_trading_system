@@ -30,6 +30,16 @@ def test_sequence_guard_accepts_only_strictly_new_events() -> None:
     assert engine.last_sequence == 101
 
 
+def test_timestamp_guard_rejects_duplicate_candle_with_new_sequence() -> None:
+    engine = PaperExecutionEngine()
+    original = event(100)
+    assert engine.on_market_event(original)
+
+    replay = MarketEvent(original.candle, sequence=101)
+    assert not engine.on_market_event(replay)
+    assert engine.last_sequence == 100
+
+
 def test_runtime_heartbeat_uses_processed_not_checkpoint_sequence() -> None:
     heartbeat = Heartbeat("runtime-test")
     runtime = PaperTradingRuntime(
