@@ -190,7 +190,7 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     from app.monitoring.database_health import DatabaseHealthMonitor
 
     async def db_health_check() -> bool:
-        return bool(await connection.fetchval("SELECT 1"))
+        return bool(await repository_connection.fetchval("SELECT 1"))
 
     db_monitor = DatabaseHealthMonitor(db_health_check)
     notifier = ConsoleNotifier()
