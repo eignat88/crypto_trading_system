@@ -817,6 +817,8 @@ ORDER BY symbol, open_time;
 - ✅ `scripts/migrate_database.py` ведёт checksum-журнал `public.schema_migrations`
 - ✅ Интеграционные тесты PostgreSQL написаны в `tests/integration/test_postgresql_pipeline.py`
 - ✅ CI workflow `.github/workflows/ci.yml` включает job `PostgreSQL 17 integration`
+- ✅ Подготовлена PowerShell-обёртка `scripts/run_daily_mart_report.ps1` для
+  последовательного запуска MART ETL и immutable daily report
 
 ### Требуется выполнить
 
@@ -824,7 +826,8 @@ ORDER BY symbol, open_time;
 - 🔲 Проверить идемпотентность повторного запуска RAW → DDS
 - 🔲 Выполнить автоматическую сверку `verify_market_data.py --layer all`
 - 🔲 Загрузить 3 года истории для BTCUSDT и ETHUSDT
-- 🔲 Подключить готовые market и MART pipelines к операционному расписанию
+- 🔲 Установить готовые market и MART/report scripts в операционное расписание и
+  подтвердить успешные запуски на целевом хосте
 
 ### Блокеры
 

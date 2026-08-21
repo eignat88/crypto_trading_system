@@ -3,7 +3,9 @@
 ## Текущий срез — 21.08.2026
 
 Исследовательский и paper foundation реализованы. Текущий этап — **стендовая
-валидация непрерывного paper runtime**. Выполнены: structured event correlation,
+валидация непрерывного paper runtime**. Дополнительно подготовлены операторский
+runbook, проверка Windows scheduled task, обёртка MART/daily report и синтетический
+restart-recovery self-check. Выполнены: structured event correlation,
 HealthCoordinator (alerts + emergency stop wiring), PaperReconciler (runtime vs DB
 state comparison), DailyReportGenerator (immutable JSON), fault-injection тесты.
 Sealed holdout `Breakout Retest v2` для BTCUSDT/ETHUSDT 1h остаётся закрытым
@@ -18,14 +20,15 @@ Sealed holdout `Breakout Retest v2` для BTCUSDT/ETHUSDT 1h остаётся �
 | Backtest/strategies/risk | ✅ Ядро готово | Causal execution, costs, walk-forward, frozen v2, Risk Engine | Зафиксировать pilot candidate |
 | Sealed holdout | 🚧 Накопление | Fail-closed update, health и preflight | Только технические проверки до unlock |
 | Paper application | ✅ Код готов | CLI, preflight, restore, Bybit REST → RAW → DDS polling, warmup, managed pipeline, checkpoint, shutdown | Проверить production feed коротким стендовым soak |
-| Restart/idempotency | ✅ Тестовый baseline | PostgreSQL E2E для sequence, orders/fills, PnL restore; duplicate-order guard | Управляемый restart во время soak |
+| Restart/idempotency | ✅ Тестовый baseline | PostgreSQL E2E для sequence, orders/fills, PnL restore; duplicate-order guard; синтетический JSON self-check | Управляемый restart реального runtime во время soak |
 | Event correlation | ✅ Код готов | run_id/signal_id в Signal, Order, Fill, RiskDecision, PaperOrderState, PaperFillState; DB migration 051 | Проверить на стенде |
 | Monitoring | ✅ Foundation готов | Durable heartbeat, DB/market/pipeline/risk monitors, HealthCoordinator wiring | Runtime wiring завершён |
 | Emergency stop | ✅ Код готов | Идемпотентная последовательность, HealthCoordinator → EmergencyStop, fault-injection тесты | Проверить на стенде |
 | Reconciliation | ✅ Код готов | PaperReconciler (orders/fills/positions/balance), recoverable/fatal classification, RiskEngine integration | Проверить на стенде |
-| Daily reporting | ✅ Код готов | DailyReportGenerator с reconciliation status, immutable JSON, content hash | Подключить к расписанию |
+| Daily reporting | ✅ Код готов | DailyReportGenerator с reconciliation status, immutable JSON, content hash; PowerShell-обёртка MART + report | Установить расписание и проверить 7 последовательных запусков |
 | Soak validation | 🚧 Runner готов | Bounded CLI, samples, lifecycle evidence, JSON report | 24–72 часа с живыми событиями |
-| Scheduling | 🚧 Код готов | Настраиваемое окно paper-сессии и Windows Task Scheduler scripts | Проверить расписание на целевом хосте |
+| Scheduling | 🚧 Код готов | Настраиваемое окно paper-сессии, install/start и verification scripts для Windows Task Scheduler | Установить и проверить расписание на целевом хосте |
+| Operations | ✅ Документация готова | Операторский `docs/RUNBOOK.md` и пошаговый acceptance runbook | Провести operator walkthrough и зафиксировать владельцев/escalation |
 | Live execution | ⛔ Запрещено | Live mode отклоняется | Только отдельный go/no-go после pilot gates |
 
 ## Важные ограничения текущей реализации
@@ -42,6 +45,10 @@ Sealed holdout `Breakout Retest v2` для BTCUSDT/ETHUSDT 1h остаётся �
    ненулевым durable checkpoint. Реализовано, требуется проверка.
 6. Календарное окно по умолчанию — будни 09:00–19:00 UTC; вне окна runtime
    безопасно не открывает сессию.
+7. `test_paper_runtime_restart_recovery.py` проверяет локальную JSON-сериализацию
+   искусственного состояния, но не production runtime/PostgreSQL restart gate.
+8. Скрипты MART/report и scheduled-task verification подготовлены, но требуют
+   evidence с целевого Windows-хоста.
 
 ## Следующие задачи по порядку
 
@@ -50,9 +57,11 @@ Sealed holdout `Breakout Retest v2` для BTCUSDT/ETHUSDT 1h остаётся �
    sequence, checkpoint и отсутствия duplicate `client_order_id`.
 3. Проверить что HealthCoordinator, PaperReconciler и DailyReportGenerator
    корректно работают на длинном прогоне.
-4. Подключить расписание MART ETL и immutable daily report к cron/scheduler.
+4. Установить расписание MART ETL и immutable daily report, затем подтвердить
+   семь последовательных успешных запусков.
 5. Выполнить целевой PostgreSQL data pilot и зафиксировать pilot configuration/SLO.
-6. Подготовить operational/incident runbook.
+6. Провести operator walkthrough по готовому runbook, заполнить владельцев и
+   escalation path.
 
 ## Воспроизводимые проверки
 
@@ -61,6 +70,7 @@ python --version
 python -m ruff check . --select F --ignore F401,F841
 python -m pytest tests/unit -q
 python -m pytest tests/reporting -q
+python scripts/test_paper_runtime_restart_recovery.py
 ```
 
 PostgreSQL integration требует изолированной БД:
