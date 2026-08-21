@@ -1,13 +1,14 @@
 # План развития Crypto Trading System
 
-> Документ синхронизирован 20.08.2026. Детальный оперативный план находится в
+> Документ синхронизирован 21.08.2026. Детальный оперативный план находится в
 > [`DEVELOPMENT_PLAN_2026-08-19.md`](DEVELOPMENT_PLAN_2026-08-19.md), а компактная
 > последовательность milestones — в [`ROADMAP.md`](ROADMAP.md).
 
 ## Цель текущего цикла
 
-Доказать эксплуатационную готовность собранного **paper application**: подключить
-непрерывный источник, встроить watchdog/emergency stop, провести soak и добавить reconciliation.
+Доказать эксплуатационную готовность собранного **paper application**: проверить
+непрерывный источник на стенде, встроить watchdog/emergency stop, провести soak и
+добавить reconciliation.
 До прохождения paper acceptance gates live trading остаётся запрещённым.
 
 ## Что уже построено
@@ -17,23 +18,26 @@
 2. **Исследование:** backtest с N → N+1 execution, costs, portfolio, audit trail и
    walk-forward foundation.
 3. **Стратегии и risk:** Trend DCA, Breakout Retest, frozen v2 и Risk Engine.
-4. **Paper application:** composition root/CLI, preflight, restore, warmup,
-   managed pipeline, fill simulation, PostgreSQL persistence, PnL и shutdown checkpoint.
+4. **Paper application:** composition root/CLI, preflight, restore, Bybit REST →
+   RAW → DDS closed-candle feed, warmup, managed pipeline, fill simulation,
+   PostgreSQL persistence, PnL и shutdown checkpoint.
 5. **Эксплуатационная база:** Python 3.12 CI, PostgreSQL 17 integration и единый
    checksum-protected migration runner.
 6. **Independent validation:** sealed holdout pipeline с запретом performance до
    `2027-02-06T00:00:00Z` и выполнения sample requirements.
 
-Restart/idempotency E2E реализован для sequence, order/fill и PnL restore. Наличие
-компонентов всё равно не равно готовности к пилоту: production builder пока использует
-пустой конечный event source, нет runtime wiring всех health triggers, внешнего alert
-routing, полного reconciliation и фактического 24–72-часового soak.
+Restart/idempotency E2E реализован для sequence, order/fill и PnL restore. Production
+builder использует long-running Bybit source, а календарное окно и Windows Task
+Scheduler scripts готовы в коде. Наличие компонентов всё равно не равно готовности к
+пилоту: нет runtime wiring всех health triggers, внешнего alert routing, полного
+reconciliation и фактического 24–72-часового soak.
 
 ## Приоритеты
 
 ### P0. Long-running paper validation
 
-- подключить long-running closed-candle source к готовому composition root;
+- [x] подключить long-running closed-candle source к готовому composition root;
+- проверить source и scheduled session на целевом стенде;
 - встроить monitors и emergency stop в runtime loop;
 - выполнить smoke, fault-injection и 24–72-часовой soak;
 - подтвердить graceful restart, monotonic sequence и отсутствие дублей.

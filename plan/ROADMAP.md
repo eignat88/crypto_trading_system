@@ -1,6 +1,6 @@
 # Роадмэп Crypto Trading System
 
-**Срез:** 20.08.2026.
+**Срез:** 21.08.2026.
 **Источник текущих приоритетов:** [`DEVELOPMENT_PLAN_2026-08-19.md`](DEVELOPMENT_PLAN_2026-08-19.md).
 **Текущий milestone:** доказать эксплуатационную готовность paper-контура. Live trading заблокирован.
 
@@ -15,6 +15,9 @@
 - [x] Restart/idempotency E2E для sequence, checkpoint, order/fill и PnL restore.
 - [x] Durable heartbeat, health monitors, notifier abstraction и emergency-stop primitive.
 - [x] Ограниченный soak runner и JSON evidence report.
+- [x] Production Bybit REST → RAW → DDS closed-candle source с bootstrap,
+  восстановлением gaps, polling и durable resume boundary.
+- [x] Настраиваемое окно paper-сессии и Windows Task Scheduler scripts.
 
 ## Milestone M1 — runnable paper application (код завершён)
 
@@ -24,8 +27,9 @@
 - [x] Durable checkpoint и signal-aware shutdown.
 - [x] Безопасный отказ для любого режима кроме `paper`.
 
-**Открытый gate:** production dependency builder пока создаёт конечный пустой
-`PaperMarketData`; реальный long-running source должен быть подключён и проверен на стенде.
+**Открытый gate:** production dependency builder уже использует long-running Bybit
+source; требуется короткий стендовый smoke с реальной PostgreSQL и подтверждение
+корректного завершения/повторного запуска по расписанию.
 
 ## Milestone M2 — restart/idempotency (код завершён, стендовый gate открыт)
 
@@ -45,6 +49,8 @@
 - [ ] Настроить внешний alert routing и freshness watchdog (health endpoint либо supervisor).
 - [ ] Добавить fault-injection для DB outage, stale data, risk breach и state mismatch.
 - [ ] Подготовить operational/incident runbook и процедуру снятия stop.
+- [ ] Проверить Windows scheduled task, границы торгового окна и автоматический
+  restart на целевом хосте.
 
 **Выход:** 24–72 часа с живым источником, без дублей/пропусков, с доказанным
 автоматическим fail-closed поведением и сохранённым evidence report.

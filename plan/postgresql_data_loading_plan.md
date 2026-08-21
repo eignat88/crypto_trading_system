@@ -1,7 +1,7 @@
 # План загрузки данных в PostgreSQL
 
 **Проект:** Crypto Trading System
-**Обновлено:** 20.08.2026
+**Обновлено:** 21.08.2026
 **Статус документа:** кодовый foundation готов; требуется пилот на целевой БД
 **Контур первой версии:** Bybit Spot, `BTCUSDT` и `ETHUSDT`
 
@@ -87,7 +87,7 @@ Bybit API
 | Журнал RAW-загрузки | `raw_system.loading_journal` | Реализовано |
 | Checkpoint DDS | `dds.etl_checkpoint` | Реализовано |
 | Журнал DDS-запусков | `dds.etl_run` | Реализовано |
-| Indicators/regime после DDS | `app/pipeline/market_pipeline.py` | Библиотечная композиция реализована; scheduler не подключён |
+| Indicators/regime после DDS | `app/pipeline/market_pipeline.py` | Подключено к paper runtime; production soak не выполнен |
 | DDS → MART | `app/reporting/mart_etl.py`, `scripts/load_mart.py` | Идемпотентный ETL реализован и протестирован |
 | Миграции | `scripts/migrate_database.py` | Единый checksum-protected runner реализован |
 
@@ -806,7 +806,7 @@ ORDER BY symbol, open_time;
 
 ---
 
-## 15. Текущий статус (обновлено 20.08.2026)
+## 15. Текущий статус (обновлено 21.08.2026)
 
 ### Выполнено
 
