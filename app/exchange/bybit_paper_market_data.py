@@ -26,7 +26,7 @@ class BybitPaperMarketData:
     def __init__(
         self,
         *,
-        connection: asyncpg.Connection,
+        pool: asyncpg.Pool,
         collector: CandleCollector,
         symbols: list[str],
         interval: str,
@@ -35,7 +35,7 @@ class BybitPaperMarketData:
         poll_seconds: float,
         stale_grace_seconds: int,
     ) -> None:
-        self.connection = connection
+        self.pool = pool
         self.collector = collector
         self.symbols = symbols
         self.interval = interval
@@ -66,8 +66,9 @@ class BybitPaperMarketData:
         return align_to_interval(now, timedelta(hours=1))
 
     async def _stats(self) -> dict[str, asyncpg.Record]:
-        rows = await self.connection.fetch(
-            """SELECT i.symbol, count(*) AS candle_count,
+        async with self.pool.acquire() as connection:
+            rows = await connection.fetch(
+                """SELECT i.symbol, count(*) AS candle_count,
                       min(c.open_time) AS first_candle,
                       max(c.open_time) AS last_candle,
                       max(c.close_time) AS last_close,
@@ -82,22 +83,23 @@ class BybitPaperMarketData:
                JOIN dds.instrument i ON i.instrument_id = c.instrument_id
                WHERE i.exchange_name = 'bybit' AND i.symbol = ANY($2::text[])
                GROUP BY i.symbol""",
-            self.interval,
-            self.symbols,
-        )
+                self.interval,
+                self.symbols,
+            )
         return {str(row["symbol"]): row for row in rows}
 
     async def _ingest(self, symbol: str, start: datetime, end: datetime) -> None:
         if start >= end:
             return
         await self.collector.load_historical_candles(symbol, self.interval, start, end)
-        await self.connection.fetch(
-            "SELECT * FROM dds.load_raw_candles($1, $2, $3, $4)",
-            "bybit",
-            symbol,
-            self.interval,
-            end,
-        )
+        async with self.pool.acquire() as connection:
+            await connection.fetch(
+                "SELECT * FROM dds.load_raw_candles($1, $2, $3, $4)",
+                "bybit",
+                symbol,
+                self.interval,
+                end,
+            )
         logger.info("market_data_etl_completed", symbol=symbol, interval=self.interval)
 
     async def bootstrap(self) -> dict[str, int]:
@@ -165,8 +167,8 @@ class BybitPaperMarketData:
         return counts
 
     async def _new_candles(self) -> list[asyncpg.Record]:
-        return list(
-            await self.connection.fetch(
+        async with self.pool.acquire() as connection:
+            rows = await connection.fetch(
                 """SELECT i.symbol, c.open_time, c.close_time, c.open_price,
                       c.high_price, c.low_price, c.close_price, c.volume
                FROM dds.candle c JOIN dds.instrument i USING (instrument_id)
@@ -178,7 +180,7 @@ class BybitPaperMarketData:
                 self.interval,
                 min(self._last_emitted.values()) if self._last_emitted else None,
             )
-        )
+        return list(rows)
 
     async def stream_async(self) -> AsyncIterator[MarketEvent]:
         while not self._stopped.is_set():

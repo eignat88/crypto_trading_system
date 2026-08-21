@@ -16,8 +16,9 @@ from app.exchange.bybit_paper_market_data import BybitPaperMarketData
 from app.exchange.paper_execution_engine import ExecutionRequest, PaperExecutionEngine
 from app.exchange.paper_state_repository import PaperStateRepository
 from app.execution.paper_trading_runtime import PaperTradingRuntime
-from app.monitoring.heartbeat import Heartbeat, PostgresHeartbeatRepository
+from app.monitoring.database_health import DatabaseHealthMonitor
 from app.monitoring.health_coordinator import HealthCoordinator
+from app.monitoring.heartbeat import Heartbeat, PostgresHeartbeatRepository
 from app.monitoring.notifier import ConsoleNotifier, Notifier
 from app.reconciliation.paper_reconciler import PaperReconciler
 from app.risk.persistence import PostgresRiskStateStore
@@ -85,10 +86,10 @@ class PaperDependencies:
 async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     """Build production adapters once; no second runtime or risk controller is created."""
     connection = await asyncpg.connect(settings.database_url_sync)
-    monitoring_pool = await asyncpg.create_pool(
+    database_pool = await asyncpg.create_pool(
         settings.database_url_sync,
         min_size=1,
-        max_size=2,
+        max_size=4,
     )
     repository = PaperStateRepositoryPostgres(connection)
     sync_engine = create_engine(settings.database_url_sync)
@@ -105,7 +106,7 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     capital = Decimal(str(settings.paper_initial_balance))
     execution = PaperExecutionEngine(state_repository=repository)
     execution.cash_balance = capital
-    heartbeat = Heartbeat("paper-runtime-001", PostgresHeartbeatRepository(monitoring_pool))
+    heartbeat = Heartbeat("paper-runtime-001", PostgresHeartbeatRepository(database_pool))
     symbols = [
         value.strip().removesuffix("-SPOT")
         for value in settings.trading_symbols.split(",")
@@ -113,7 +114,7 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     ]
     bybit = BybitClient()
     market_data = BybitPaperMarketData(
-        connection=connection,
+        pool=database_pool,
         collector=CandleCollector(bybit),
         symbols=symbols,
         interval=settings.paper_market_interval,
@@ -138,22 +139,25 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     )
 
     async def database_check() -> bool:
-        return bool(await connection.fetchval("SELECT 1"))
+        async with database_pool.acquire() as check_connection:
+            return bool(await check_connection.fetchval("SELECT 1"))
 
     async def migration_check() -> bool:
-        return bool(
-            await connection.fetchval(
-                """SELECT to_regclass('public.schema_migrations') IS NOT NULL
+        async with database_pool.acquire() as check_connection:
+            return bool(
+                await check_connection.fetchval(
+                    """SELECT to_regclass('public.schema_migrations') IS NOT NULL
                           AND to_regclass('monitoring.runtime_health') IS NOT NULL
                           AND EXISTS (
                               SELECT 1 FROM public.schema_migrations WHERE version = 50
                           )"""
+                )
             )
-        )
 
     async def warmup(symbols: list[str], required: int) -> dict[str, int]:
-        rows = await connection.fetch(
-            """SELECT i.symbol, count(*) AS candle_count
+        async with database_pool.acquire() as warmup_connection:
+            rows = await warmup_connection.fetch(
+                """SELECT i.symbol, count(*) AS candle_count
                FROM (SELECT c.instrument_id, c.open_time,
                             row_number() OVER (
                                 PARTITION BY c.instrument_id ORDER BY c.open_time DESC
@@ -164,15 +168,15 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
                JOIN dds.instrument i ON i.instrument_id = recent.instrument_id
                WHERE recent.rn <= $1 AND i.symbol = ANY($2::text[])
                GROUP BY i.symbol""",
-            required,
-            symbols,
-        )
+                required,
+                symbols,
+            )
         return {str(row["symbol"]): int(row["candle_count"]) for row in rows}
 
     async def close() -> None:
         market_data.stop()
         await bybit.close()
-        await monitoring_pool.close()
+        await database_pool.close()
         await connection.close()
         sync_engine.dispose()
 
@@ -181,11 +185,9 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         if snapshots:
             await repository.save_pnl_snapshot(snapshots[-1])
 
-    # Wire HealthCoordinator
-    from app.monitoring.database_health import DatabaseHealthMonitor
-
     async def db_health_check() -> bool:
-        return bool(await connection.fetchval("SELECT 1"))
+        async with database_pool.acquire() as check_connection:
+            return bool(await check_connection.fetchval("SELECT 1"))
 
     db_monitor = DatabaseHealthMonitor(db_health_check)
     notifier = ConsoleNotifier()
