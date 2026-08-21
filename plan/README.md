@@ -8,6 +8,7 @@
 | `DEVELOPMENT_PLAN_2026-08-19.md` | Канонический аудит (обновлён 21.08), приоритеты и acceptance gates | Канонический |
 | `STATUS.md` | Краткий фактический срез готовности | Актуальный |
 | `ROADMAP.md` | Последовательность milestones и зависимости | Актуальный |
+| `OPERATIONAL_RUNBOOK.md` | Порядок acceptance gates и команды стендовой проверки | Актуальный |
 | `crypto_trading_system_development_plan.md` | Стабильный обзор направления разработки | Синхронизирован |
 | `postgresql_data_loading_plan.md` | Детальный data-loading contract и этапы | Актуальный |
 | `postgresql_pilot_runbook.md` | Команды безопасного пилота на целевой БД | Актуальный |
@@ -22,3 +23,5 @@
   фактическое прохождение стендового gate.
 - Не добавлять performance sealed holdout до разрешённой даты и проверки выборки.
 - При изменении DDL обновлять канонические миграции и migration-runner tests.
+- Вспомогательные self-check/PowerShell-скрипты не считать свидетельством
+  прохождения стендовых gates без сохранённого evidence целевого прогона.

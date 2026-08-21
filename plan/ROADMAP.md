@@ -18,6 +18,8 @@
 - [x] Production Bybit REST → RAW → DDS closed-candle source с bootstrap,
   восстановлением gaps, polling и durable resume boundary.
 - [x] Настраиваемое окно paper-сессии и Windows Task Scheduler scripts.
+- [x] Операторский runbook, scheduled-task verifier, MART/daily-report wrapper и
+  синтетический restart-recovery self-check.
 
 ## Milestone M1 — runnable paper application (код завершён)
 
@@ -37,6 +39,7 @@ source; требуется короткий стендовый smoke с реал
 - [x] Детерминированный `client_order_id` и защита от повторного ордера после restore.
 - [x] Durable managed-pipeline checkpoint и повторная обработка без изменения факта.
 - [x] Единый paper `run_id`/`signal_id` во все operational events (DB migration 051).
+- [x] Добавить локальный self-check искусственного paper state (не заменяет PostgreSQL soak).
 - [ ] Выполнить управляемый restart в 24–72-часовом PostgreSQL soak.
 
 ## Milestone M3 — observability и fail-closed operation (код завершён)
@@ -48,7 +51,8 @@ source; требуется короткий стендовый smoke с реал
 - [x] HealthCoordinator: wiring monitors → RiskEngine → EmergencyStop → Notifier.
 - [x] Fault-injection тесты для DB outage, stale data, risk breach и state mismatch.
 - [ ] Настроить внешний alert routing и freshness watchdog (health endpoint либо supervisor).
-- [ ] Подготовить operational/incident runbook и процедуру снятия stop.
+- [x] Подготовить operational/incident runbook и базовую процедуру восстановления.
+- [ ] Выполнить operator walkthrough, назначить escalation и утвердить снятие stop.
 - [ ] Проверить Windows scheduled task, границы торгового окна и автоматический
   restart на целевом хосте.
 
@@ -62,7 +66,8 @@ source; требуется короткий стендовый smoke с реал
 - [x] RiskEngine.update_reconciliation() блокирует новые входы при fatal.
 - [x] DailyReportGenerator: immutable JSON с reconciliation status, content hash.
 - [x] Wire в PaperApplication: periodic reconciliation + HealthCoordinator.
-- [ ] Подключить расписание MART ETL и daily report к cron/scheduler.
+- [x] Подготовить PowerShell-обёртку запуска MART ETL и daily report.
+- [ ] Установить её в Task Scheduler и подтвердить 7 последовательных запусков.
 
 ## Milestone M5 — paper pilot (минимум 90 дней)
 

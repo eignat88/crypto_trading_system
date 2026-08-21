@@ -181,6 +181,9 @@ Stop-ScheduledTask -TaskName "CryptoTradingPaperStop"
 
 ## Этап 4: Подключение cron/scheduler для MART ETL
 
+**Статус:** обёртка `scripts/run_daily_mart_report.ps1` подготовлена; установка
+расписания и семидневное evidence на целевом хосте не выполнены.
+
 ### Цель
 Настроить автоматический запуск MART ETL и генерацию immutable daily report.
 
@@ -191,21 +194,18 @@ Stop-ScheduledTask -TaskName "CryptoTradingPaperStop"
 
 ### Последовательность действий
 
-```bash
-# 1. Создать скрипт запуска MART ETL
-#    scripts/run_mart_etl.sh (или .ps1)
+```powershell
+# 1. Проверить ручной последовательный запуск MART ETL и daily report
+.\scripts\run_daily_mart_report.ps1
 
-# 2. Создать скрипт генерации daily report
-#    scripts/run_daily_report.sh (или .ps1)
-
-# 3. Настроить расписание (cron или Task Scheduler)
+# 2. Настроить расписание (cron или Task Scheduler)
 #    MART ETL: ежедневно в 00:05 UTC (после закрытия дня)
 #    Daily report: ежедневно в 00:10 UTC
 
-# 4. Проверить что отчёты генерируются
-ls artifacts/daily_report_*.json
+# 3. Проверить что отчёты генерируются
+Get-ChildItem artifacts\reports\daily_report_*.json
 
-# 5. Проверить что MART таблицы обновляются
+# 4. Проверить что MART таблицы обновляются
 #    SELECT count(*) FROM mart.daily_performance;
 #    SELECT count(*) FROM mart.trade_statistics;
 ```
@@ -227,6 +227,9 @@ ls artifacts/daily_report_*.json
 ---
 
 ## Этап 5: Runbook
+
+**Статус:** базовый операторский runbook создан в `docs/RUNBOOK.md`; остаются
+operator walkthrough, контакты/escalation path и утверждение процедуры снятия stop.
 
 ### Цель
 Подготовить документацию для оператора: запуск, остановка, восстановление, расследование инцидентов.

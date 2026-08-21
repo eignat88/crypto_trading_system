@@ -7,8 +7,8 @@
 ## Цель текущего цикла
 
 Доказать эксплуатационную готовность собранного **paper application**: проверить
-непрерывный источник на стенде, встроить watchdog/emergency stop, провести soak и
-добавить reconciliation.
+непрерывный источник на стенде, проверить уже встроенные emergency stop и
+reconciliation, провести soak и настроить внешний watchdog/alerts.
 До прохождения paper acceptance gates live trading остаётся запрещённым.
 
 ## Что уже построено
@@ -29,8 +29,8 @@
 Restart/idempotency E2E реализован для sequence, order/fill и PnL restore. Production
 builder использует long-running Bybit source, а календарное окно и Windows Task
 Scheduler scripts готовы в коде. Наличие компонентов всё равно не равно готовности к
-пилоту: нет runtime wiring всех health triggers, внешнего alert routing, полного
-reconciliation и фактического 24–72-часового soak.
+пилоту: не выполнены внешний alert routing, operator walkthrough и фактический
+24–72-часовой soak.
 
 ## Приоритеты
 
@@ -38,27 +38,29 @@ reconciliation и фактического 24–72-часового soak.
 
 - [x] подключить long-running closed-candle source к готовому composition root;
 - проверить source и scheduled session на целевом стенде;
-- встроить monitors и emergency stop в runtime loop;
-- выполнить smoke, fault-injection и 24–72-часовой soak;
+- [x] встроить monitors и emergency stop в runtime loop;
+- [x] выполнить fault-injection tests;
+- выполнить smoke и 24–72-часовой soak;
 - подтвердить graceful restart, monotonic sequence и отсутствие дублей.
 
 ### P0. Idempotency и recovery
 
 - [x] restart E2E для sequence/order/fill/PnL/checkpoint;
 - [x] deterministic client order identity и duplicate-order protection;
-- [ ] единые operational `run_id`/`signal_id` и стендовый restart во время soak.
+- [x] единые operational `run_id`/`signal_id` и синтетический restart self-check;
+- [ ] стендовый restart production runtime во время soak.
 
 ### P1. Observability и reconciliation
 
 - [x] durable heartbeat, health monitors, soak metrics/report и emergency-stop primitive;
-- [ ] automatic triggers, external alerts и freshness watchdog;
-- сверка orders/fills/positions/equity/last event;
-- runbook и fault-injection.
+- [x] automatic health triggers и сверка orders/fills/positions/equity/last event;
+- [x] runbook и fault-injection;
+- [ ] external alerts, freshness watchdog и operator walkthrough.
 
 ### P1. Reporting и pilot
 
-- production scheduling для готовых market и MART pipelines;
-- immutable daily report;
+- production scheduling для готовых market и MART pipelines (обёртка готова);
+- [x] immutable daily report;
 - фиксированная pilot configuration;
 - 7-day burn-in и минимум 90 дней/100 закрытых сделок.
 

@@ -43,6 +43,8 @@
   coordinator, bounded soak runner и JSON evidence report.
 - Настраиваемое календарное окно paper-сессии и PowerShell-скрипты запуска через
   Windows Task Scheduler.
+- Операторский runbook, scheduled-task verifier, MART/daily-report wrapper и
+  локальный синтетический restart-recovery self-check.
 
 ### Реализовано частично или не интегрировано
 
@@ -51,13 +53,13 @@
    короткий прогон на целевой PostgreSQL ещё не выполнен.
 2. Managed market pipeline подключён и протестирован, но его длительный запуск с
    реальным источником и целевой PostgreSQL ещё не доказан.
-3. DDS → MART ETL реализован и протестирован, однако production-расписание и
-   immutable daily-report delivery ещё не настроены.
-4. Heartbeat, health monitors, console notifier и emergency stop реализованы как
-   primitives. Нет полного runtime wiring, внешнего alert routing/watchdog,
-   operational runbook и fault-injection evidence.
-5. Нет exchange reconciliation и live order manager. Live режим должен оставаться
-   запрещённым.
+3. DDS → MART ETL и immutable report реализованы; PowerShell-обёртка готова, но
+   production-расписание и подтверждённая доставка ещё не настроены.
+4. HealthCoordinator, paper reconciliation, fault-injection tests и операторский
+   runbook готовы. Остаются внешний alert routing/watchdog, operator walkthrough
+   и стендовое evidence.
+5. Exchange/live reconciliation и live order manager отсутствуют. Live режим
+   должен оставаться запрещённым.
 6. Полный lint debt и целевой PostgreSQL pilot остаются отдельными gates.
 
 ### Проверяемый baseline
@@ -123,6 +125,8 @@
 - [x] Добавить PostgreSQL E2E restart для runtime/checkpoint/order/fill/PnL restore.
 - [x] Подключить long-running event source к production dependency builder.
 - [x] Единый paper `run_id`/`signal_id` во все operational events (DB migration 051).
+- [x] Добавить локальный синтетический restart-recovery self-check; не засчитывать
+  его как runtime/PostgreSQL gate.
 - [ ] Выполнить управляемый restart в soak и проверить resume boundary на стенде.
 
 **Критерий выхода:** 24-часовой локальный/стендовый soak проходит без дублей,
@@ -150,7 +154,8 @@
 - [x] Реализовать notifier interface и идемпотентный emergency-stop coordinator.
 - [x] Связать alerts и fail-closed emergency stop срабатывающими при stale data, DB outage,
   превышении risk limits и state mismatch (HealthCoordinator).
-- [ ] Подготовить runbook запуска, остановки, восстановления и расследования инцидента.
+- [x] Подготовить runbook запуска, остановки, восстановления и расследования инцидента.
+- [ ] Провести operator walkthrough, заполнить escalation path и утвердить снятие stop.
 
 **Критерий выхода:** fault-injection тесты подтверждают, что каждый критический
 сбой блокирует новые входы, сохраняет диагностический след и допускает безопасное
@@ -162,8 +167,8 @@
   последнего обработанного market event (PaperReconciler).
 - [x] Классифицировать расхождения на recoverable/fatal; автоматическое исправление
   разрешить только для однозначных случаев.
-- [x] Подключить реализованный DDS → MART ETL к расписанию и immutable daily report
-  (DailyReportGenerator).
+- [x] Подготовить запуск DDS → MART ETL и immutable daily report
+  (DailyReportGenerator) одной PowerShell-командой.
 - [x] Формировать ежедневный immutable report с комиссиями, slippage, drawdown,
   rejection reasons и reconciliation status.
 - [x] Wire в PaperApplication: periodic reconciliation + HealthCoordinator.
