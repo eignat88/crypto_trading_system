@@ -46,6 +46,7 @@ strict = true
 
 [tool.pytest.ini_options]
 addopts = ["--import-mode=importlib"]
+pythonpath = ["."]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [

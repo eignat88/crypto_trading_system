@@ -28,5 +28,6 @@ async def test_restore_preserves_sequence_cash_and_position() -> None:
     runtime = PaperTradingRuntime(PaperMarketData([]), engine, state_repository=repository)  # type: ignore[arg-type]
     state = await runtime.restore_state()
     assert state is not None and state.last_market_sequence == 500
+    assert engine.last_processed_timestamp == repository.state.last_processed_timestamp
     assert engine.cash_balance == Decimal("900")
     assert engine.positions["BTCUSDT"].quantity == Decimal("0.1")
