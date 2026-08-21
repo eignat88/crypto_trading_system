@@ -2,11 +2,12 @@
 
 ## Текущий срез — 21.08.2026
 
-Исследовательский и paper foundation реализованы. Текущий этап — не «сборка
-composition root», а **стендовая валидация непрерывного paper runtime**, интеграция
-мониторинга/emergency stop и reconciliation. Sealed holdout `Breakout Retest v2`
-для BTCUSDT/ETHUSDT 1h остаётся закрытым для performance до
-`2027-02-06T00:00:00Z` и выполнения sample gate.
+Исследовательский и paper foundation реализованы. Текущий этап — **стендовая
+валидация непрерывного paper runtime**. Выполнены: structured event correlation,
+HealthCoordinator (alerts + emergency stop wiring), PaperReconciler (runtime vs DB
+state comparison), DailyReportGenerator (immutable JSON), fault-injection тесты.
+Sealed holdout `Breakout Retest v2` для BTCUSDT/ETHUSDT 1h остаётся закрытым
+для performance до `2027-02-06T00:00:00Z`.
 
 ## Матрица готовности
 
@@ -18,11 +19,13 @@ composition root», а **стендовая валидация непрерыв�
 | Sealed holdout | 🚧 Накопление | Fail-closed update, health и preflight | Только технические проверки до unlock |
 | Paper application | ✅ Код готов | CLI, preflight, restore, Bybit REST → RAW → DDS polling, warmup, managed pipeline, checkpoint, shutdown | Проверить production feed коротким стендовым soak |
 | Restart/idempotency | ✅ Тестовый baseline | PostgreSQL E2E для sequence, orders/fills, PnL restore; duplicate-order guard | Управляемый restart во время soak |
-| Monitoring | 🚧 Foundation готов | Durable heartbeat, DB/market/pipeline/risk monitors, console notifier | Runtime wiring, watchdog и alert transport |
-| Emergency stop | 🚧 Primitive готов | Идемпотентная последовательность disable/close/checkpoint/audit/notify/stop | Автоматические triggers и fault injection |
+| Event correlation | ✅ Код готов | run_id/signal_id в Signal, Order, Fill, RiskDecision, PaperOrderState, PaperFillState; DB migration 051 | Проверить на стенде |
+| Monitoring | ✅ Foundation готов | Durable heartbeat, DB/market/pipeline/risk monitors, HealthCoordinator wiring | Runtime wiring завершён |
+| Emergency stop | ✅ Код готов | Идемпотентная последовательность, HealthCoordinator → EmergencyStop, fault-injection тесты | Проверить на стенде |
+| Reconciliation | ✅ Код готов | PaperReconciler (orders/fills/positions/balance), recoverable/fatal classification, RiskEngine integration | Проверить на стенде |
+| Daily reporting | ✅ Код готов | DailyReportGenerator с reconciliation status, immutable JSON, content hash | Подключить к расписанию |
 | Soak validation | 🚧 Runner готов | Bounded CLI, samples, lifecycle evidence, JSON report | 24–72 часа с живыми событиями |
-| Scheduling | 🚧 Код готов | Настраиваемое окно paper-сессии и Windows Task Scheduler scripts | Проверить расписание и автоматический restart на целевом хосте |
-| Reconciliation | ❌ Не реализовано | Отдельного operational reconciler нет | До любого paper pilot |
+| Scheduling | 🚧 Код готов | Настраиваемое окно paper-сессии и Windows Task Scheduler scripts | Проверить расписание на целевом хосте |
 | Live execution | ⛔ Запрещено | Live mode отклоняется | Только отдельный go/no-go после pilot gates |
 
 ## Важные ограничения текущей реализации
@@ -30,29 +33,26 @@ composition root», а **стендовая валидация непрерыв�
 1. `build_paper_dependencies()` использует long-running Bybit REST → RAW → DDS
    источник закрытых 1h свечей. Статический `PaperMarketData` сохранён только для
    детерминированных тестов; production-поток требует стендовой проверки с PostgreSQL.
-2. Health monitors и `EmergencyStop` существуют как компоненты, но ещё не образуют
-   единый автоматический watchdog в основном runtime.
-3. Soak runner сохраняет heartbeat и JSON evidence, однако сам по себе не доказывает
-   market throughput, restart и отсутствие дублей: это проверяется по отчёту и БД.
-4. Console notifier не является внешним alert routing.
-5. Reconciliation orders/fills/positions/equity/last event отсутствует; live запрещён.
-6. Предыдущие короткие `restart_before`/`restart_after` с sequence=0 не являются
+2. HealthCoordinator и PaperReconciler подключены к runtime, но ещё не проверены
+   на длинном стендовом прогоне с реальными данными.
+3. Console notifier не является внешним alert routing.
+4. Запуск расписания MART ETL и daily report ещё не подключён к cron/scheduler.
+5. Предыдущие короткие `restart_before`/`restart_after` с sequence=0 не являются
    доказательством отказа: restart/idempotency остаётся проверить на событии X с
    ненулевым durable checkpoint. Реализовано, требуется проверка.
-7. Календарное окно по умолчанию — будни 09:00–19:00 UTC; вне окна runtime
-   безопасно не открывает сессию. PowerShell-скрипты установки и запуска задачи
-   подготовлены, но их работа на целевом Windows-хосте ещё не подтверждена.
+6. Календарное окно по умолчанию — будни 09:00–19:00 UTC; вне окна runtime
+   безопасно не открывает сессию.
 
 ## Следующие задачи по порядку
 
 1. Выполнить короткий smoke soak long-running closed-candle source.
-2. Связать DB/market/pipeline/risk monitors с emergency stop и внешним notifier.
-3. Провести fault-injection и короткий smoke soak, затем 24–72-часовой стендовый soak.
-4. Во время soak выполнить restart и подтвердить monotonic sequence, checkpoint и
-   отсутствие duplicate `client_order_id`.
-5. Реализовать operational reconciliation до разрешения новых входов.
-6. Подключить расписание MART и immutable daily report.
-7. Выполнить целевой PostgreSQL data pilot и зафиксировать pilot configuration/SLO.
+2. Провести 24–72-часовой стендовый soak с restart и подтверждением monotonic
+   sequence, checkpoint и отсутствия duplicate `client_order_id`.
+3. Проверить что HealthCoordinator, PaperReconciler и DailyReportGenerator
+   корректно работают на длинном прогоне.
+4. Подключить расписание MART ETL и immutable daily report к cron/scheduler.
+5. Выполнить целевой PostgreSQL data pilot и зафиксировать pilot configuration/SLO.
+6. Подготовить operational/incident runbook.
 
 ## Воспроизводимые проверки
 
@@ -85,3 +85,4 @@ TRADING_MODE=paper python scripts/run_paper_soak.py \
 - DB outage, stale data, risk breach или reconciliation mismatch должны запрещать новые входы.
 - Holdout допускает только ingestion/completeness/gaps/duplicates/provenance/determinism.
 - Количество тестов не фиксируется вручную: источники истины — discovery и CI.
+- Fault-injection тесты подтверждают fail-closed поведение для каждого критического сбоя.

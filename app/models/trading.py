@@ -7,6 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any
+from uuid import uuid4
 
 
 class SignalAction(StrEnum):
@@ -35,6 +36,8 @@ class Signal:
     indicators: dict[str, Any] = field(default_factory=dict)
     regime: str | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
+    signal_id: str = field(default_factory=lambda: str(uuid4()))
+    run_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,8 @@ class Order:
     quantity: Decimal
     requested_price: Decimal
     created_at: datetime
+    run_id: str = ""
+    signal_id: str = ""
 
     @property
     def symbol(self) -> str:
@@ -55,7 +60,7 @@ class Order:
 
 @dataclass(frozen=True)
 class RiskDecision:
-    """Auditable Risk Engine decision for a normalized order."""
+    """Auditable Risk Engine decision for an normalized order."""
 
     order_id: str
     approved: bool
@@ -64,6 +69,8 @@ class RiskDecision:
     reasons: tuple[str, ...]
     requested_quantity: Decimal
     approved_quantity: Decimal | None = None
+    run_id: str = ""
+    signal_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -78,6 +85,8 @@ class Fill:
     price: Decimal
     commission: Decimal
     timestamp: datetime
+    run_id: str = ""
+    signal_id: str = ""
 
 
 @dataclass

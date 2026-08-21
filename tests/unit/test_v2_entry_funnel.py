@@ -74,7 +74,13 @@ def test_instrumented_strategy_preserves_parent_confirmation_signal() -> None:
         _candle(1, "106"), _indicators(rsi="46", ema20="105"), _portfolio()
     )
 
-    assert parent_signal == observed_signal
+    # Compare all fields except signal_id (random UUID per instance)
+    from dataclasses import fields as dc_fields
+
+    for fld in dc_fields(parent_signal):
+        if fld.name == "signal_id":
+            continue
+        assert getattr(parent_signal, fld.name) == getattr(observed_signal, fld.name)
     assert observed.traces[-1].event == "CONFIRMED"
     assert observed.lifecycles[-1].terminal_reason == "CONFIRMED"
 

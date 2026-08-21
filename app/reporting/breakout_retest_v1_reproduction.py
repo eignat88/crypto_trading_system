@@ -91,7 +91,12 @@ def _canonical(value: Any) -> Any:
     if is_dataclass(value):
         return _canonical(asdict(value))
     if isinstance(value, dict):
-        return {str(key): _canonical(item) for key, item in sorted(value.items(), key=lambda x: str(x[0]))}
+        # signal_id is a random UUID that varies per run; exclude from fingerprint
+        return {
+            str(key): _canonical(item)
+            for key, item in sorted(value.items(), key=lambda x: str(x[0]))
+            if key != "signal_id"
+        }
     if isinstance(value, (list, tuple)):
         return [_canonical(item) for item in value]
     return value

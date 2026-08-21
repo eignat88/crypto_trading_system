@@ -176,6 +176,8 @@ class PaperExecutionEngine:
         market_price: Decimal | None = None,
         *,
         client_order_id: str | None = None,
+        run_id: str | None = None,
+        signal_id: str | None = None,
     ) -> ExecutionResult:
         if client_order_id is not None and client_order_id in self._client_orders:
             order_id = self._client_orders[client_order_id]
@@ -243,10 +245,14 @@ class PaperExecutionEngine:
             order_id=order_id, symbol=request.symbol, side=request.side,
             quantity=fill.quantity, status=ExecutionStatus.FILLED, created_at=now,
             client_order_id=client_order_id,
+            run_id=run_id,
+            signal_id=signal_id,
         )
         fill_state = PaperFillState(
             fill_id=fill_id, order_id=order_id, symbol=request.symbol,
             quantity=fill.quantity, price=fill.price, executed_at=now,
+            run_id=run_id,
+            signal_id=signal_id,
         )
         self.orders[order_id] = order
         self.fills[fill_id] = fill_state

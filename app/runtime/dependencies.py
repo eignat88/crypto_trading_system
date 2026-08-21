@@ -17,7 +17,9 @@ from app.exchange.paper_execution_engine import ExecutionRequest, PaperExecution
 from app.exchange.paper_state_repository import PaperStateRepository
 from app.execution.paper_trading_runtime import PaperTradingRuntime
 from app.monitoring.heartbeat import Heartbeat, PostgresHeartbeatRepository
+from app.monitoring.health_coordinator import HealthCoordinator
 from app.monitoring.notifier import ConsoleNotifier, Notifier
+from app.reconciliation.paper_reconciler import PaperReconciler
 from app.risk.persistence import PostgresRiskStateStore
 from app.risk.risk_engine import RiskConfig, RiskEngine
 from app.runtime.scheduler import TradingSchedule, parse_hhmm
@@ -76,6 +78,8 @@ class PaperDependencies:
     heartbeat: Heartbeat | None = None
     notifier: Notifier | None = None
     session_manager: SessionManager | None = None
+    health_coordinator: HealthCoordinator | None = None
+    reconciler: PaperReconciler | None = None
 
 
 async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
@@ -177,6 +181,27 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         if snapshots:
             await repository.save_pnl_snapshot(snapshots[-1])
 
+    # Wire HealthCoordinator
+    from app.monitoring.database_health import DatabaseHealthMonitor
+
+    async def db_health_check() -> bool:
+        return bool(await connection.fetchval("SELECT 1"))
+
+    db_monitor = DatabaseHealthMonitor(db_health_check)
+    notifier = ConsoleNotifier()
+    health_coordinator = HealthCoordinator(
+        database_monitor=db_monitor,
+        risk_engine=risk_engine,
+        notifier=notifier,
+        runtime_id=heartbeat.runtime_id,
+    )
+
+    # Wire PaperReconciler
+    reconciler = PaperReconciler(
+        state_reader=execution,
+        db_reader=repository,
+    )
+
     return PaperDependencies(
         runtime=runtime,
         repository=repository,
@@ -194,6 +219,8 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         market_data_bootstrap=market_data.bootstrap,
         warmup_candles=settings.paper_market_warmup_candles,
         heartbeat=heartbeat,
-        notifier=ConsoleNotifier(),
+        notifier=notifier,
         session_manager=session_manager,
+        health_coordinator=health_coordinator,
+        reconciler=reconciler,
     )

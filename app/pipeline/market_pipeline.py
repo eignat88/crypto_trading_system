@@ -6,6 +6,7 @@ import asyncio
 import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any
+from uuid import uuid4
 
 import structlog
 
@@ -37,6 +38,7 @@ class MarketPipeline:
         required_candles: int = 200,
         symbols: set[str] | None = None,
         state: PipelineStateTracker | None = None,
+        run_id: str | None = None,
     ) -> None:
         self.indicator_collector = indicator_collector
         self.raw_store = raw_store
@@ -56,6 +58,7 @@ class MarketPipeline:
         self._mart_task: asyncio.Task[Any] | None = None
         self._lock = asyncio.Lock()
         self._logger = structlog.get_logger()
+        self.run_id = run_id or str(uuid4())
 
     async def process_new_candles(self, symbol: str, interval: str) -> int:
         """Compatibility entry point for scheduled incremental indicator loading."""
@@ -123,6 +126,10 @@ class MarketPipeline:
                     signal = await self._call(self.strategy, "evaluate", candle, indicators, regime)
                     stages.append("STRATEGY")
                     if signal is not None:
+                        # Propagate run_id and signal_id through the pipeline
+                        if hasattr(signal, "run_id") and not signal.run_id:
+                            from dataclasses import replace
+                            signal = replace(signal, run_id=self.run_id)
                         risk_decision = await self._call(self.risk_engine, "evaluate", signal)
                         stages.append("RISK")
                         if self._approved(risk_decision):
@@ -153,6 +160,11 @@ class MarketPipeline:
                     if self.is_trading_ready(symbol)
                     else PipelineStatus.WARMUP
                 )
+                signal_id = (
+                    signal.signal_id
+                    if signal is not None and hasattr(signal, "signal_id")
+                    else ""
+                )
                 return PipelineResult(
                     status,
                     event.sequence,
@@ -161,6 +173,8 @@ class MarketPipeline:
                     risk_decision,
                     execution,
                     stages=tuple(stages),
+                    run_id=self.run_id,
+                    signal_id=signal_id,
                 )
             except Exception as exc:
                 self.tracker.state = PipelineState.DEGRADED
@@ -175,6 +189,7 @@ class MarketPipeline:
                     False,
                     reason=str(exc),
                     stages=tuple(stages),
+                    run_id=self.run_id,
                 )
 
     async def stop(self) -> None:

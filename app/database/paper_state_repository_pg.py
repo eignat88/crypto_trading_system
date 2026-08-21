@@ -128,9 +128,10 @@ class PaperStateRepositoryPostgres(PaperStateRepository):
         await self._connection.execute(
             """
             INSERT INTO paper_orders(
-                order_id, symbol, side, quantity, status, created_at, client_order_id
+                order_id, symbol, side, quantity, status, created_at, client_order_id,
+                run_id, signal_id
             )
-            VALUES($1,$2,$3,$4,$5,$6,$7)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
             ON CONFLICT(order_id) DO UPDATE SET status=EXCLUDED.status
             """,
             order.order_id,
@@ -140,6 +141,8 @@ class PaperStateRepositoryPostgres(PaperStateRepository):
             order.status,
             order.created_at,
             order.client_order_id,
+            order.run_id,
+            order.signal_id,
         )
 
     async def load_orders(self) -> list[PaperOrderState]:
@@ -149,11 +152,13 @@ class PaperStateRepositoryPostgres(PaperStateRepository):
     async def save_fill(self, fill: PaperFillState) -> None:
         await self._connection.execute(
             """
-            INSERT INTO paper_fills(fill_id, order_id, symbol, quantity, price, executed_at)
-            VALUES($1,$2,$3,$4,$5,$6)
+            INSERT INTO paper_fills(fill_id, order_id, symbol, quantity, price, executed_at,
+                run_id, signal_id)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8)
             ON CONFLICT(fill_id) DO NOTHING
             """,
             fill.fill_id, fill.order_id, fill.symbol, fill.quantity, fill.price, fill.executed_at,
+            fill.run_id, fill.signal_id,
         )
 
     async def load_fills(self) -> list[PaperFillState]:

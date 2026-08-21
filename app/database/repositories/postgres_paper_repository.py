@@ -30,9 +30,12 @@ class PostgresPaperRepository:
         query = text(
             """
             INSERT INTO dds.paper_orders
-            (order_id, client_order_id, symbol, side, order_type, quantity, price, status, created_at, updated_at)
+            (order_id, client_order_id, symbol, side, order_type, quantity,
+             price, status, created_at, updated_at, run_id, signal_id)
             VALUES
-            (:order_id, :client_order_id, :symbol, :side, :order_type, :quantity, :price, :status, :created_at, :updated_at)
+            (:order_id, :client_order_id, :symbol, :side, :order_type,
+             :quantity, :price, :status, :created_at, :updated_at,
+             :run_id, :signal_id)
             ON CONFLICT (order_id)
             DO UPDATE SET
                 status = EXCLUDED.status,
@@ -56,6 +59,8 @@ class PostgresPaperRepository:
                 "status": order["status"],
                 "created_at": order.get("created_at", now),
                 "updated_at": now,
+                "run_id": order.get("run_id"),
+                "signal_id": order.get("signal_id"),
             },
         )
         await self.session.commit()
@@ -64,9 +69,11 @@ class PostgresPaperRepository:
         query = text(
             """
             INSERT INTO dds.paper_fills
-            (fill_id, order_id, symbol, quantity, price, commission, executed_at)
+            (fill_id, order_id, symbol, quantity, price, commission,
+             executed_at, run_id, signal_id)
             VALUES
-            (:fill_id, :order_id, :symbol, :quantity, :price, :commission, :executed_at)
+            (:fill_id, :order_id, :symbol, :quantity, :price, :commission,
+             :executed_at, :run_id, :signal_id)
             ON CONFLICT (fill_id)
             DO NOTHING
             """
@@ -82,6 +89,8 @@ class PostgresPaperRepository:
                 "price": Decimal(str(fill["price"])),
                 "commission": Decimal(str(fill.get("commission", "0"))),
                 "executed_at": fill.get("executed_at", datetime.now(timezone.utc)),
+                "run_id": fill.get("run_id"),
+                "signal_id": fill.get("signal_id"),
             },
         )
         await self.session.commit()
@@ -99,7 +108,9 @@ class PostgresPaperRepository:
                 price,
                 status,
                 created_at,
-                updated_at
+                updated_at,
+                run_id,
+                signal_id
             FROM dds.paper_orders
             ORDER BY created_at
             """
@@ -118,7 +129,9 @@ class PostgresPaperRepository:
                 quantity,
                 price,
                 commission,
-                executed_at
+                executed_at,
+                run_id,
+                signal_id
             FROM dds.paper_fills
             ORDER BY executed_at
             """

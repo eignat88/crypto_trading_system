@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, Protocol
+from uuid import uuid4
 
 import structlog
 
@@ -66,6 +67,7 @@ class PaperTradingRuntime:
         metrics_collector: PaperMetricsCollector | None = None,
         checkpoint_interval: int = 1,  # Checkpoint every N candles
         heartbeat: Heartbeat | None = None,
+        reconciliation_interval: int = 50,  # Reconcile every N candles
     ) -> None:
         self.market_data = market_data
         self.execution_engine = execution_engine
@@ -75,6 +77,8 @@ class PaperTradingRuntime:
         self.metrics_collector = metrics_collector
         self.checkpoint_interval = checkpoint_interval
         self.heartbeat = heartbeat
+        self.reconciliation_interval = reconciliation_interval
+        self._reconcile_callback: Callable[[], Awaitable[object]] | None = None
 
         self._running = False
         self._candles_processed = 0
@@ -83,6 +87,13 @@ class PaperTradingRuntime:
         self._shutdown_event = asyncio.Event()
         self.trading_enabled = True
         self.session_id: str | None = None
+        self.run_id: str = str(uuid4())
+
+    def set_reconciliation_callback(
+        self, callback: Callable[[], Awaitable[object]]
+    ) -> None:
+        """Set a callback to run periodic reconciliation."""
+        self._reconcile_callback = callback
 
     @property
     def is_running(self) -> bool:
@@ -242,6 +253,7 @@ class PaperTradingRuntime:
                                 f"{self.session_id or 'paper'}:{sequence}:{request_index}:"
                                 f"{request.symbol}:{request.side.value}"
                             ),
+                            run_id=self.run_id,
                         )
                         logger.info(
                             "Executed: %s %s @ %s (qty=%s)",
@@ -291,6 +303,18 @@ class PaperTradingRuntime:
         # Checkpoint at specified interval
         if self._candles_processed % self.checkpoint_interval == 0:
             await self._checkpoint()
+
+        # Reconcile at specified interval
+        if (
+            self._reconcile_callback is not None
+            and self.reconciliation_interval > 0
+            and self._candles_processed % self.reconciliation_interval == 0
+        ):
+            try:
+                await self._reconcile_callback()
+            except Exception:
+                logger.exception("reconciliation_callback_failed")
+
         if self.heartbeat is not None:
             await self.heartbeat.beat(
                 state="RUNNING",
@@ -314,7 +338,11 @@ class PaperTradingRuntime:
         self._start_time = datetime.now(UTC)
         self._shutdown_event.clear()
 
-        logger.info("PaperTradingRuntime starting...")
+        # Bind run_id to structlog context for all loggers in this runtime
+        structlog.contextvars.clear_contextvars()
+        structlog.contextvars.bind_contextvars(run_id=self.run_id)
+
+        logger.info("PaperTradingRuntime starting... run_id=%s", self.run_id)
 
         # Emit runtime started metric
         if self.metrics_collector is not None:

@@ -13,3 +13,5 @@ class PaperFillState:
     quantity: Decimal
     price: Decimal
     executed_at: datetime
+    run_id: str | None = None
+    signal_id: str | None = None
