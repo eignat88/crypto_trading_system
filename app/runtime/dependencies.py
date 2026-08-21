@@ -84,13 +84,17 @@ class PaperDependencies:
 
 async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     """Build production adapters once; no second runtime or risk controller is created."""
-    connection = await asyncpg.connect(settings.database_url_sync)
+    # Separate connections for market data and state repository to avoid
+    # InterfaceError('cannot perform operation: another operation is in progress')
+    # when bootstrap() runs concurrently with repository writes.
+    repository_connection = await asyncpg.connect(settings.database_url_sync)
+    market_data_connection = await asyncpg.connect(settings.database_url_sync)
     monitoring_pool = await asyncpg.create_pool(
         settings.database_url_sync,
         min_size=1,
         max_size=2,
     )
-    repository = PaperStateRepositoryPostgres(connection)
+    repository = PaperStateRepositoryPostgres(repository_connection)
     sync_engine = create_engine(settings.database_url_sync)
     risk_config = RiskConfig(
         max_risk_per_trade=Decimal(str(settings.max_risk_per_trade)),
@@ -113,7 +117,7 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     ]
     bybit = BybitClient()
     market_data = BybitPaperMarketData(
-        connection=connection,
+        connection=market_data_connection,
         collector=CandleCollector(bybit),
         symbols=symbols,
         interval=settings.paper_market_interval,
@@ -138,11 +142,11 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
     )
 
     async def database_check() -> bool:
-        return bool(await connection.fetchval("SELECT 1"))
+        return bool(await repository_connection.fetchval("SELECT 1"))
 
     async def migration_check() -> bool:
         return bool(
-            await connection.fetchval(
+            await repository_connection.fetchval(
                 """SELECT to_regclass('public.schema_migrations') IS NOT NULL
                           AND to_regclass('monitoring.runtime_health') IS NOT NULL
                           AND EXISTS (
@@ -152,7 +156,7 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         )
 
     async def warmup(symbols: list[str], required: int) -> dict[str, int]:
-        rows = await connection.fetch(
+        rows = await market_data_connection.fetch(
             """SELECT i.symbol, count(*) AS candle_count
                FROM (SELECT c.instrument_id, c.open_time,
                             row_number() OVER (
@@ -173,7 +177,8 @@ async def build_paper_dependencies(settings: Settings) -> PaperDependencies:
         market_data.stop()
         await bybit.close()
         await monitoring_pool.close()
-        await connection.close()
+        await repository_connection.close()
+        await market_data_connection.close()
         sync_engine.dispose()
 
     async def pnl_checkpoint() -> None:
