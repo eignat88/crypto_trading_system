@@ -28,7 +28,11 @@ logger = structlog.get_logger()
 class BybitClient(BaseExchange):
     """Bybit V5 client with idempotency-safe order submission."""
 
-    BASE_URL = "https://api.bybit.com"
+    BASE_URLS = {
+        "demo": "https://api-demo.bybit.com",
+        "testnet": "https://api-testnet.bybit.com",
+        "mainnet": "https://api.bybit.com",
+    }
     RECV_WINDOW = 5_000
     MAX_GET_ATTEMPTS = 3
     AUTH_ERROR_CODES = {10003, 10004, 10005, 10007, 10010}
@@ -38,9 +42,11 @@ class BybitClient(BaseExchange):
     def __init__(self) -> None:
         self.api_key = settings.exchange_api_key
         self.api_secret = settings.exchange_api_secret
+        self.environment = settings.bybit_environment
+        self.base_url = self.BASE_URLS.get(self.environment, self.BASE_URLS["demo"])
         self._live_key_checked = False
         self.client = httpx.AsyncClient(
-            base_url=self.BASE_URL,
+            base_url=self.base_url,
             timeout=30.0,
             limits=httpx.Limits(max_connections=100),
         )
