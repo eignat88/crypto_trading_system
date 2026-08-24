@@ -136,7 +136,7 @@ async def test_runtime_restores_state_and_continues() -> None:
     
     # Simulate previous run: processed 3 candles, has a position
     await repository.save_state(PaperRuntimeState(
-        last_processed_timestamp=datetime(2024, 1, 1, 3, 0, tzinfo=timezone.utc),
+        last_processed_timestamp=datetime(2024, 1, 1, 2, 0, tzinfo=timezone.utc),
         last_market_sequence=3,
         cash_balance=Decimal("9000"),
     ))
