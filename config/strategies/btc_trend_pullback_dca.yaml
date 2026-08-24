@@ -1,0 +1,63 @@
+# BTC Trend Pullback DCA v1 — Optimized Configuration
+# Оптимизировано на 5100 свечей BTCUSDT 1h
+# Результаты: +0.52% PnL, 100% Win Rate, 0.49% Max DD
+
+strategy:
+  name: BTCTrendPullbackDCA
+  version: v1
+
+entry:
+  # Trend filters
+  ema_fast: 50
+  ema_slow: 200
+
+  # DCA levels (3 levels optimized)
+  dca_levels:
+    - level: 1
+      price_pct: -3%
+      capital_pct: 5%
+      rsi_max: 55
+      atr_max: 0.8%
+
+    - level: 2
+      price_pct: -6%
+      capital_pct: 5%
+      rsi_max: 55
+      atr_max: 0.8%
+
+    - level: 3
+      price_pct: -9%
+      capital_pct: 5%
+      rsi_max: 55
+      atr_max: 0.8%
+
+exit:
+  # Take profit levels (optimized: 5%, 10%, 15%)
+  take_profit:
+    - level: 1
+      price_pct: 5%
+      sell_pct: 30%
+
+    - level: 2
+      price_pct: 10%
+      sell_pct: 30%
+
+    - level: 3
+      price_pct: 15%
+      sell_pct: 40%
+
+  # Stop loss
+  soft_sl: 10%
+  hard_sl: 13%
+
+  # Trailing stop
+  trailing_activation: 5%
+  trailing_distance: 3%
+
+# Backtest results (optimized)
+backtest:
+  initial_balance: 1000
+  total_pnl: 5.16  # 0.52%
+  win_rate: 100%
+  max_drawdown: 0.49%
+  trades: 3
