@@ -2,7 +2,7 @@
 param(
     [string]$ProjectRoot = 'D:\py_pro\crypto_trading_system',
     [double]$DurationHours = 10,
-    [string]$OutputReport = 'artifacts/paper_soak_report.json'
+    [string]$OutputReport
 )
 
 $ErrorActionPreference = 'Stop'
@@ -22,6 +22,13 @@ if (-not (Test-Path -LiteralPath $soakScript -PathType Leaf)) {
 }
 
 Set-Location -LiteralPath $ProjectRoot
+
+# Keep each scheduled run as separate acceptance evidence. An explicitly supplied
+# path is still honoured for manual runs and backwards-compatible automation.
+if ([string]::IsNullOrWhiteSpace($OutputReport)) {
+    $runDate = Get-Date -Format 'yyyyMMdd'
+    $OutputReport = "artifacts/paper_soak_report_$runDate.json"
+}
 
 # Activate the project's virtual environment and force the safe trading mode.
 & $activateScript

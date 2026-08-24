@@ -179,7 +179,21 @@ cd D:\py_pro\crypto_trading_system
 ### Проверка
 ```powershell
 Get-ScheduledTask -TaskName "Crypto Trading Paper Runtime"
+Get-ScheduledTaskInfo -TaskName "Crypto Trading Paper Runtime"
 ```
+
+Каждый запуск по расписанию сохраняет отдельный evidence-отчёт с локальной датой
+старта в имени, например `artifacts\paper_soak_report_20260824.json`. Поэтому
+последовательные дневные прогоны не перезаписывают результаты друг друга. Список
+накопленных отчётов можно проверить так:
+
+```powershell
+Get-ChildItem .\artifacts\paper_soak_report_*.json |
+    Sort-Object LastWriteTime
+```
+
+Для ручного запуска имя можно переопределить параметром
+`-OutputReport 'artifacts/custom_report.json'` у `start_paper_runtime.ps1`.
 
 ### Ручной запуск
 ```powershell
